@@ -6,19 +6,26 @@ import { Button } from "@/components/ui/button";
 import { Feedback } from "@/components/forms";
 import { refreshReplies } from "@/lib/actions";
 import type { ActionResult } from "@/lib/errors";
-export function HistoryControls({ hasQueued }: { hasQueued: boolean }) {
+export function HistoryControls({
+  hasQueued,
+  autoRefresh = true,
+}: {
+  hasQueued: boolean;
+  autoRefresh?: boolean;
+}) {
   const [result, setResult] = useState<ActionResult>();
   const [pending, start] = useTransition();
   const router = useRouter();
   useEffect(() => {
+    if (!autoRefresh) return;
     const interval = setInterval(
       () => {
         if (document.visibilityState === "visible") router.refresh();
       },
-      hasQueued ? 10000 : 30000,
+      hasQueued ? 5000 : 30000,
     );
     return () => clearInterval(interval);
-  }, [hasQueued, router]);
+  }, [hasQueued, autoRefresh, router]);
   return (
     <div className="space-y-2">
       <Button

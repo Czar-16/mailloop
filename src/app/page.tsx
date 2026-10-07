@@ -1,3 +1,4 @@
+import { ThemeControl } from "@/components/theme";
 import Link from "next/link";
 import { ArrowRight, Files, Users, Send, Paperclip, Check } from "lucide-react";
 import { auth, signIn } from "@/auth";
@@ -22,6 +23,7 @@ export default async function Home({
       <header className="border-b border-border">
         <div className="page-container flex items-center justify-between py-4">
           <Wordmark />
+          <ThemeControl />
           <form action={googleSignIn}>
             <Button variant="outline">
               Sign In <ArrowRight aria-hidden="true" />
@@ -36,7 +38,7 @@ export default async function Home({
             className="pointer-events-none absolute -right-32 top-0 -z-10 h-[560px] w-[700px] opacity-25 blur-3xl"
             style={{
               background:
-                "radial-gradient(ellipse at 30% 30%, #00dfd8, transparent 45%), radial-gradient(ellipse at 70% 45%, #7928ca, transparent 45%), radial-gradient(ellipse at 55% 70%, #ff0080, transparent 40%), radial-gradient(ellipse at 90% 85%, #f9cb28, transparent 45%)",
+                "radial-gradient(ellipse at 45% 40%, var(--link), transparent 65%)",
             }}
           />
           <div className="page-container grid items-center gap-12 py-24 lg:grid-cols-2 lg:py-32">
@@ -141,6 +143,7 @@ export default async function Home({
       <footer className="border-t border-border">
         <div className="page-container flex flex-wrap items-center justify-between gap-4 py-8">
           <Wordmark />
+          <ThemeControl />
           <span className="text-xs text-body">
             Built for your next chapter.
           </span>

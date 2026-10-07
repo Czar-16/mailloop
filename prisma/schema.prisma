@@ -19,6 +19,8 @@ model User {
   encryptedRefreshToken String?
   googleId              String?      @unique
   gmailAuthorized       Boolean      @default(false)
+  preferredRoles        String[]     @default([])
+  resumeUrl             String?
   nextSendAt            DateTime?
   currentAttachmentId   String?
   createdAt             DateTime     @default(now())
@@ -48,6 +50,7 @@ model Contact {
   name       String
   email      String
   company    String?
+  jobRole    String?
   notes      String?
   tag        String?
   archivedAt DateTime?
@@ -81,6 +84,7 @@ model Send {
   createdAt        DateTime      @default(now())
   recipientEmail   String        @default("")
   recipientName    String        @default("")
+  recipientRole    String        @default("")
   recipientCompany String        @default("")
   templateName     String        @default("")
   subject          String        @default("")

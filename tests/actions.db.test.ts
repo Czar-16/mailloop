@@ -33,6 +33,7 @@ import {
   saveContact,
   saveTemplate,
   submitCampaign,
+  savePreferences,
 } from "@/lib/actions";
 
 const enabled = process.env.MAILLOOP_DB_TESTS === "1";
@@ -47,6 +48,7 @@ if (
 
 const form = (fields: Record<string, string>) => {
   const data = new FormData();
+  data.set("jobRole", "Engineer");
   for (const [key, value] of Object.entries(fields)) data.set(key, value);
   return data;
 };
@@ -98,6 +100,36 @@ describe.runIf(enabled)("authenticated database-backed actions", () => {
     await db.$disconnect();
   });
 
+  it("persists preferences for the current user and rejects invalid roles and URLs", async () => {
+    expect(
+      await savePreferences({
+        preferredRoles: ["SDE Intern", "Frontend Developer"],
+        resumeUrl: "https://example.com/resume",
+      }),
+    ).toMatchObject({ ok: true });
+    expect(await db.user.findUnique({ where: { id: userId } })).toMatchObject({
+      preferredRoles: ["SDE Intern", "Frontend Developer"],
+      resumeUrl: "https://example.com/resume",
+    });
+    expect(await db.user.findUnique({ where: { id: otherId } })).toMatchObject({
+      preferredRoles: [],
+      resumeUrl: null,
+    });
+    for (const input of [
+      { preferredRoles: [], resumeUrl: "" },
+      { preferredRoles: ["Engineer", "engineer"], resumeUrl: "" },
+      { preferredRoles: ["Engineer"], resumeUrl: "http://example.com" },
+    ])
+      expect(await savePreferences(input)).toMatchObject({ ok: false });
+  });
+  it("rejects unresolved import rows without a partial save", async () => {
+    expect(
+      await importContacts(
+        "email,jobRole\nalex@example.test,Engineer\ncareers@example.test,Engineer",
+      ),
+    ).toMatchObject({ ok: false });
+    expect(await db.contact.count({ where: { userId } })).toBe(1);
+  });
   it("requires a session before every action and never masks authentication failures", async () => {
     mocks.requireUser.mockRejectedValue(new Error("Authentication required"));
     const calls = [
@@ -108,6 +140,7 @@ describe.runIf(enabled)("authenticated database-backed actions", () => {
       () => importContacts("name,email,company\nNew,new@example.test,Acme"),
       () => submitCampaign({}),
       () => refreshReplies(),
+      () => savePreferences({ preferredRoles: ["Engineer"], resumeUrl: "" }),
     ];
     for (const call of calls) {
       await expect(call()).rejects.toThrow("Authentication required");
@@ -273,16 +306,15 @@ describe.runIf(enabled)("authenticated database-backed actions", () => {
     });
     const outcome = await importContacts(
       [
-        "name,email,company",
-        "Existing,ALEX@EXAMPLE.TEST,Acme",
-        "New,new@example.test,Acme",
-        "Repeated,NEW@EXAMPLE.TEST,Acme",
-        "Invalid,invalid-email,Acme",
+        "name,email,company,jobRole",
+        "Existing,ALEX@EXAMPLE.TEST,Acme,Engineer",
+        "New,new@example.test,Acme,Engineer",
+        "Repeated,NEW@EXAMPLE.TEST,Acme,Engineer",
       ].join("\n"),
     );
     expect(outcome).toMatchObject({
       ok: true,
-      message: "1 contacts imported. 3 rows skipped.",
+      message: "1 contacts imported. 2 rows skipped.",
     });
     expect(await db.contact.count({ where: { userId } })).toBe(2);
     expect(await db.contact.count({ where: { userId: otherId } })).toBe(1);
@@ -310,7 +342,7 @@ describe.runIf(enabled)("authenticated database-backed actions", () => {
       ok: false,
       fieldErrors: {
         subject: "Subject must be one line.",
-        body: expect.stringContaining("Use only"),
+        body: expect.stringContaining("Use {{name}}"),
       },
     });
     expect(await db.contact.count({ where: { userId } })).toBe(1);

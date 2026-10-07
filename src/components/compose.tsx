@@ -8,12 +8,16 @@ import { Input } from "@/components/ui/input";
 import { renderTemplate } from "@/lib/validation";
 import { submitCampaign } from "@/lib/actions";
 import { Feedback, useUnsavedChanges } from "@/components/forms";
+import { DateTime } from "@/components/date-time";
+import { RoleChoices } from "@/components/preferences";
 import type { ActionResult } from "@/lib/errors";
 export type ComposeContact = {
   id: string;
   name: string;
   email: string;
   company: string | null;
+  jobRole: string | null;
+  lastSent: string | null;
   previouslySent: boolean;
   blocked: boolean;
 };
@@ -23,16 +27,28 @@ export function Compose({
   used,
   resume,
   connected,
+  roles,
+  resumeUrl,
 }: {
   templates: { id: string; name: string; subject: string; body: string }[];
   contacts: ComposeContact[];
   used: number;
   resume: string | null;
   connected: boolean;
+  roles: string[];
+  resumeUrl: string | null;
 }) {
   const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
   const [selected, setSelected] = useState<ComposeContact[]>([]);
   const [role, setRole] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
+  const [recipientRoles, setRecipientRoles] = useState<Record<string, string>>(
+    {},
+  );
+  const [attachResume, setAttachResume] = useState(!!resume && !resumeUrl);
+  const getRole = (c: ComposeContact) =>
+    recipientRoles[c.id] ?? c.jobRole ?? "";
+
   const [resendIds, setResendIds] = useState<string[]>([]);
   const [previewId, setPreviewId] = useState("");
   const [result, setResult] = useState<ActionResult>();
@@ -58,7 +74,7 @@ export function Compose({
     setKey("");
   }
   return (
-    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_440px]">
+    <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_440px]">
       <div className="space-y-6">
         <section className="panel space-y-5 p-6">
           <p className="eyebrow">01 / The message</p>
@@ -101,7 +117,7 @@ export function Compose({
               htmlFor="compose-role"
               className="mb-2 block text-sm font-medium"
             >
-              Role you’re applying for
+              Role to Apply to Selected
             </label>
             <Input
               id="compose-role"
@@ -131,9 +147,36 @@ export function Compose({
               </p>
             )}
             <p className="mt-2 text-xs text-body">
-              Fills <code>{"{{role}}"}</code> for every recipient in this
-              campaign.
+              Enter actual values here. Templates use{" "}
+              {"{{name}}, {{company}}, {{role}}, and {{resume_link}}"}. Each
+              recipient keeps their own role; overrides apply only to this
+              batch.
             </p>
+            <RoleChoices
+              roles={roles}
+              disabled={pending}
+              onChoose={(r) => setRole(r)}
+            />
+            <Button
+              className="mt-3"
+              variant="outline"
+              disabled={pending}
+              onClick={() => {
+                if (!role.trim()) {
+                  setResult({ ok: false, message: "Enter a role to apply." });
+                  return;
+                }
+                setRecipientRoles({
+                  ...recipientRoles,
+                  ...Object.fromEntries(
+                    selected.map((c) => [c.id, role.trim()]),
+                  ),
+                });
+                setKey("");
+              }}
+            >
+              Apply Role to Selected
+            </Button>
           </div>
         </section>
         <section className="panel p-6">
@@ -147,6 +190,22 @@ export function Compose({
             Previously contacted people are skipped unless you allow a resend.
             Queued or unconfirmed sends are blocked.
           </p>
+          <label className="mb-4 block text-sm">
+            Filter by Job Role
+            <select
+              name="roleFilter"
+              className="ml-2"
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value)}
+            >
+              <option value="">All Roles</option>
+              {[...new Set([...roles, ...contacts.map((c) => c.jobRole ?? "")])]
+                .filter(Boolean)
+                .map((r) => (
+                  <option key={r}>{r}</option>
+                ))}
+            </select>
+          </label>
           <div className="space-y-1">
             {!contacts.length && (
               <p className="py-6 text-sm text-body">
@@ -157,48 +216,61 @@ export function Compose({
                 or change your search.
               </p>
             )}
-            {contacts.map((c) => {
-              const checked = selected.some((s) => s.id === c.id);
-              return (
-                <div key={c.id} className="rounded-sm border border-border p-3">
-                  <label
-                    className={`flex min-h-11 items-center gap-3 ${c.blocked ? "opacity-60" : "cursor-pointer"}`}
+            {contacts
+              .filter((c) => !roleFilter || c.jobRole === roleFilter)
+              .map((c) => {
+                const checked = selected.some((s) => s.id === c.id);
+                return (
+                  <div
+                    key={c.id}
+                    className="rounded-sm border border-border p-3"
                   >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggle(c)}
-                      disabled={
-                        pending ||
-                        c.blocked ||
-                        (!checked && selected.length >= 15)
-                      }
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block break-words text-sm font-medium">
-                        {c.name}{" "}
-                        <span className="font-normal text-body">
-                          {c.company && `· ${c.company}`}
+                    <label
+                      className={`flex min-h-11 items-center gap-3 ${c.blocked ? "opacity-60" : "cursor-pointer"}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggle(c)}
+                        disabled={
+                          pending ||
+                          c.blocked ||
+                          (!checked && selected.length >= 15)
+                        }
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block break-words text-sm font-medium">
+                          {c.name}{" "}
+                          <span className="font-normal text-body">
+                            {c.company && `· ${c.company}`}
+                          </span>
+                        </span>
+                        <span className="block break-all text-xs text-body">
+                          {c.email}
                         </span>
                       </span>
-                      <span className="block break-all text-xs text-body">
-                        {c.email}
-                      </span>
-                    </span>
-                  </label>
-                  {c.blocked && (
-                    <p className="ml-7 text-xs text-warning">
-                      Already queued or awaiting delivery confirmation
+                    </label>
+                    <p className="ml-7 text-xs text-body">
+                      {getRole(c) || "Choose a job role before sending"}
                     </p>
-                  )}
-                  {c.previouslySent && !c.blocked && (
-                    <p className="ml-7 text-xs text-warning">
-                      Previously contacted · skipped by default
-                    </p>
-                  )}
-                </div>
-              );
-            })}
+                    {c.lastSent && (
+                      <p className="ml-7 text-xs text-body">
+                        Last Sent: <DateTime value={c.lastSent} />
+                      </p>
+                    )}
+                    {c.blocked && (
+                      <p className="ml-7 text-xs text-warning">
+                        Already queued or awaiting delivery confirmation
+                      </p>
+                    )}
+                    {c.previouslySent && !c.blocked && (
+                      <p className="ml-7 text-xs text-warning">
+                        Previously contacted · skipped by default
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
           </div>
           {selected.some((c) => !contacts.some((v) => v.id === c.id)) && (
             <p className="mt-4 text-xs text-body">
@@ -206,6 +278,33 @@ export function Compose({
             </p>
           )}
         </section>
+        {selected.length > 0 && (
+          <section className="panel space-y-4 p-6">
+            <h2 className="text-sm font-medium">
+              Recipient Roles for This Batch
+            </h2>
+            {selected.map((c) => (
+              <label key={c.id} className="block text-sm">
+                Job Role for {c.name}
+                <Input
+                  name={`role-${c.id}`}
+                  value={getRole(c)}
+                  maxLength={160}
+                  autoComplete="off"
+                  disabled={pending}
+                  onChange={(e) => {
+                    setRecipientRoles({
+                      ...recipientRoles,
+                      [c.id]: e.target.value,
+                    });
+                    setKey("");
+                  }}
+                  required
+                />
+              </label>
+            ))}
+          </section>
+        )}
         {selected.some((c) => c.previouslySent) && (
           <section className="panel p-6">
             <h2 className="text-sm font-medium">
@@ -271,15 +370,33 @@ export function Compose({
                 {renderTemplate(template.subject, {
                   name: preview.name,
                   company: preview.company,
-                  role,
+                  role: getRole(preview),
+                  resume_link: resumeUrl,
                 })}
               </h2>
               <p className="min-h-40 whitespace-pre-wrap break-words">
                 {renderTemplate(template.body, {
                   name: preview.name,
                   company: preview.company,
-                  role,
-                })}
+                  role: getRole(preview),
+                  resume_link: resumeUrl,
+                })
+                  .split(resumeUrl || "\u0000")
+                  .map((part, i) => (
+                    <span key={i}>
+                      {i > 0 && resumeUrl && (
+                        <a
+                          href={resumeUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-link"
+                        >
+                          {resumeUrl}
+                        </a>
+                      )}
+                      {part}
+                    </span>
+                  ))}
               </p>
               {preview.previouslySent && !resendIds.includes(preview.id) && (
                 <p className="text-xs text-warning">
@@ -296,7 +413,7 @@ export function Compose({
           <div className="border-t border-border bg-background px-6 py-4">
             <p className="flex items-center gap-2 break-all text-xs text-body">
               <Paperclip className="size-4 shrink-0" aria-hidden="true" />
-              {resume ?? "No resume attached"}
+              {attachResume ? resume : "No PDF attachment"}
               <Link href="/settings" className="ml-auto text-link">
                 Settings
               </Link>
@@ -304,6 +421,26 @@ export function Compose({
           </div>
         </section>
         <section className="panel space-y-4 p-6">
+          <label className="flex min-h-11 items-center gap-3 text-sm">
+            <input
+              type="checkbox"
+              name="attachResume"
+              checked={attachResume}
+              disabled={pending || !resume}
+              onChange={(e) => {
+                setAttachResume(e.target.checked);
+                setKey("");
+              }}
+            />
+            Attach Resume{!resume && " (upload a PDF in Settings)"}
+          </label>
+          <p className="break-words text-xs text-body">
+            PDF: {attachResume ? resume : "None"}. Resume link:{" "}
+            {/\{\{\s*resume_link\s*\}\}/.test(template?.body ?? "")
+              ? resumeUrl || "Missing — save URL in Settings"
+              : "Not included by this template"}
+            .
+          </p>
           <div className="flex items-center justify-between text-sm">
             <span className="text-body">Individual emails</span>
             <span className="font-medium tabular-nums">{included.length}</span>
@@ -345,13 +482,33 @@ export function Compose({
                 });
                 return;
               }
+              if (included.some((c) => !getRole(c).trim())) {
+                setResult({
+                  ok: false,
+                  message: "Choose a job role for every recipient.",
+                });
+                return;
+              }
+              if (/{{\s*resume_link\s*}}/.test(template.body) && !resumeUrl) {
+                setResult({
+                  ok: false,
+                  message:
+                    "Save a resume URL in Settings before using this template.",
+                });
+                return;
+              }
               const key = idempotencyKey || crypto.randomUUID();
               setKey(key);
               start(async () => {
                 const r = await submitCampaign({
                   templateId,
                   recipientIds: selected.map((c) => c.id),
-                  role,
+                  recipientRoles: Object.fromEntries(
+                    selected
+                      .filter((c) => getRole(c).trim())
+                      .map((c) => [c.id, getRole(c)]),
+                  ),
+                  attachResume,
                   resendIds,
                   idempotencyKey: key,
                 });
@@ -360,7 +517,7 @@ export function Compose({
                   setSelected([]);
                   setResendIds([]);
                   setKey("");
-                  router.push("/history");
+                  router.push(`/history?campaign=${r.id}`);
                 }
               });
             }}

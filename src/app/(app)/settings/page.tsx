@@ -1,3 +1,4 @@
+import { Preferences } from "@/components/preferences";
 import { requireUser } from "@/lib/session";
 import { db } from "@/lib/db";
 import { signIn } from "@/auth";
@@ -21,7 +22,8 @@ export default async function Settings() {
         title="Settings"
         description="Manage your Gmail connection and the resume that goes with your introductions."
       />
-      <div className="grid items-start gap-6 lg:grid-cols-2">
+      <Preferences roles={user.preferredRoles} resumeUrl={user.resumeUrl} />
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
         <section className="panel space-y-5 p-6">
           <h2 className="text-xl font-semibold tracking-tight">
             Gmail Connection

@@ -128,16 +128,26 @@ test("template, contact import, preview, and individual campaign queue", async (
     .fill(
       "name,email,company\nAlex,alex@example.test,Acme\nSam,sam@example.test,Other\nDuplicate,ALEX@example.test,Acme\nBad,invalid,Acme",
     );
+  await page.getByLabel("Bulk Job Role", { exact: true }).fill("Engineer");
   await page.getByRole("button", { name: "Preview Import" }).click();
   await expect(
-    page.getByText("2 ready · 1 duplicates · 1 invalid"),
+    page.getByText("2 ready · 1 duplicates · 1 need correction"),
   ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Import Valid Contacts" }),
+  ).toBeDisabled();
+  await page
+    .getByLabel("Row 5 email", { exact: true })
+    .fill("alex@example.test");
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(page.viewportSize()!.width + 1);
   await page.getByRole("button", { name: "Import Valid Contacts" }).click();
   await expect(
-    page.getByText("2 contacts imported. 2 rows skipped."),
+    page.getByText("2 contacts imported. 0 rows skipped."),
   ).toBeVisible();
   await page.goto("/compose");
-  await page.getByLabel("Role you’re applying for").fill("Engineer");
+  await page.getByLabel("Role to Apply to Selected").fill("Engineer");
   await page.getByRole("checkbox", { name: /Alex/ }).check();
   await expect(
     page.getByRole("heading", { name: "Engineer at Acme", exact: true }),
@@ -151,8 +161,10 @@ test("template, contact import, preview, and individual campaign queue", async (
   await page
     .getByRole("button", { name: "Send 1 Individual Email", exact: true })
     .click();
-  await expect(page).toHaveURL(/\/history$/);
-  await expect(page.getByText("queued", { exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/history\?campaign=/);
+  await expect(
+    page.getByText("Waiting for delivery service", { exact: true }).first(),
+  ).toBeVisible();
   const rows = await pool.query(
     'SELECT s."recipientEmail",s.subject,s.body FROM "Send" s JOIN "Campaign" c ON c.id=s."campaignId" WHERE c."userId"=$1',
     [userId],
@@ -229,7 +241,7 @@ test("recipient cap, duplicate override, search persistence, and keyboard focus"
   await expect(page.getByText("15 / 15 selected")).toBeVisible();
   await page.getByRole("checkbox", { name: /Person 00/ }).uncheck();
   await expect(page.getByText("14 / 15 selected")).toBeVisible();
-  await page.getByLabel("Role you’re applying for").focus();
+  await page.getByLabel("Role to Apply to Selected").focus();
   await page.keyboard.press("Tab");
   expect(
     await page.evaluate(
@@ -265,4 +277,256 @@ test("invalid template keeps typed values and focuses the field error", async ({
   await expect(
     page.getByText("Template saved.", { exact: true }),
   ).toBeVisible();
+});
+
+test("setup, name suggestion manual override, account menu, and theme persistence", async ({
+  page,
+  userId,
+}) => {
+  await page.goto("/contacts");
+  await page
+    .getByRole("button", { name: "SDE Intern", exact: true })
+    .first()
+    .click();
+  await page
+    .getByRole("button", { name: "Save Preferences", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Choose Your Preferred Roles" }),
+  ).toHaveCount(0);
+  await page
+    .getByLabel("Email", { exact: true })
+    .fill("alex.smith123@example.test");
+  await expect(page.getByLabel("Name", { exact: true })).toHaveValue("Alex");
+  await page.getByLabel("Name", { exact: true }).fill("Taylor");
+  await page.getByLabel("Email", { exact: true }).fill("sam@example.test");
+  await expect(page.getByLabel("Name", { exact: true })).toHaveValue("Taylor");
+  await page
+    .locator("form")
+    .filter({ has: page.getByRole("heading", { name: "New Contact" }) })
+    .getByRole("button", { name: "SDE Intern", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Save Contact", exact: true }).click();
+  await expect(page.getByText("Contact saved.", { exact: true })).toBeVisible();
+  const saved = await pool.query(
+    'SELECT "preferredRoles" FROM "User" WHERE id=$1',
+    [userId],
+  );
+  expect(saved.rows[0].preferredRoles).toEqual(["SDE Intern"]);
+  await page.getByRole("button", { name: "Account menu", exact: true }).click();
+  await expect(page.getByRole("menu")).toContainText("Test User");
+  await expect(
+    page.getByRole("menuitem", { name: "Settings", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(page.getByRole("menuitem", { name: "Sign Out" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByRole("button", { name: "Account menu" }),
+  ).toBeFocused();
+  await page.getByRole("button", { name: "Account menu" }).click();
+  await page.locator("main h1").click({ position: { x: 5, y: 5 } });
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  await page.getByLabel("Theme", { exact: true }).selectOption("dark");
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  for (const route of [
+    "contacts",
+    "compose",
+    "templates",
+    "history",
+    "settings",
+  ]) {
+    await page.goto(`/${route}`);
+    expect(
+      (await new AxeBuilder({ page }).analyze()).violations,
+      route,
+    ).toEqual([]);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth + 1,
+      ),
+    ).toBe(true);
+  }
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.getByLabel("Theme", { exact: true }).selectOption("light");
+  expect(
+    await page.evaluate(
+      () =>
+        document.body
+          .getAnimations()
+          .filter((a) =>
+            (a.effect as KeyframeEffect)
+              .getKeyframes()
+              .some(
+                (frame) => frame.opacity === 0.75 || frame.opacity === "0.75",
+              ),
+          ).length,
+    ),
+  ).toBe(0);
+});
+
+test("example template, focused placeholder insertion, pasted lists and mixed roles with links", async ({
+  page,
+  userId,
+}) => {
+  await pool.query(
+    'UPDATE "User" SET "preferredRoles"=$2,"resumeUrl"=$3 WHERE id=$1',
+    [
+      userId,
+      ["SDE Intern", "Frontend Developer"],
+      "https://example.com/resume",
+    ],
+  );
+  await page.goto("/templates");
+  await page.getByRole("button", { name: "Use Example", exact: true }).click();
+  await expect(page.getByLabel("Subject", { exact: true })).toHaveValue(
+    "Exploring {{role}} opportunities",
+  );
+  await page.getByLabel("Template name", { exact: true }).fill("Mixed Roles");
+  await page.getByLabel("Subject", { exact: true }).fill("Opportunity for ");
+  await page.getByLabel("Subject", { exact: true }).focus();
+  await page
+    .getByRole("button", { name: "Insert {{role}}", exact: true })
+    .click();
+  await expect(page.getByLabel("Subject", { exact: true })).toHaveValue(
+    "Opportunity for {{role}}",
+  );
+  await page
+    .getByLabel("Message", { exact: true })
+    .fill("Hi {{name}}, I’m applying for {{role}}. Resume: ");
+  await page
+    .getByRole("button", { name: "Insert {{resume_link}}", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Save Template", exact: true })
+    .click();
+  await expect(
+    page.getByText("Template saved.", { exact: true }),
+  ).toBeVisible();
+  await page.goto("/contacts");
+  await page
+    .getByLabel("Or paste your list", { exact: true })
+    .fill("alex.smith@example.test;sam@example.test,careers@example.test");
+  await page.getByLabel("Bulk Job Role", { exact: true }).fill("SDE Intern");
+  await page.getByRole("button", { name: "Preview Import" }).click();
+  await page.getByLabel("Row 3 name", { exact: true }).fill("Taylor");
+  await page
+    .getByLabel("Row 3 jobRole", { exact: true })
+    .fill("Frontend Developer");
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(page.viewportSize()!.width + 1);
+  await page.getByRole("button", { name: "Import Valid Contacts" }).click();
+  await expect(
+    page.getByText("3 contacts imported. 0 rows skipped."),
+  ).toBeVisible();
+  await page.goto("/compose");
+  for (const name of ["Alex", "Sam", "Taylor"])
+    await page.getByRole("checkbox", { name: new RegExp(name) }).check();
+  await expect(
+    page.getByLabel("Attach Resume", { exact: false }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("link", { name: "https://example.com/resume", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByLabel("Preview recipient", { exact: true })
+    .selectOption({ label: "Taylor · careers@example.test" });
+  await expect(
+    page.getByRole("heading", {
+      name: "Opportunity for Frontend Developer",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Send 3 Individual Emails", exact: true })
+    .click();
+  await expect(page).toHaveURL(/history\?campaign=/);
+  await expect(
+    page.getByRole("region", { name: "Campaign delivery progress" }),
+  ).toContainText("Waiting for delivery service");
+  const sends = await pool.query(
+    'SELECT s."recipientRole",s.body,c."attachmentId" FROM "Send" s JOIN "Campaign" c ON c.id=s."campaignId" WHERE c."userId"=$1',
+    [userId],
+  );
+  expect(sends.rows.map((r) => r.recipientRole).sort()).toEqual([
+    "Frontend Developer",
+    "SDE Intern",
+    "SDE Intern",
+  ]);
+  expect(
+    sends.rows.every(
+      (r) =>
+        r.body.includes("https://example.com/resume") &&
+        r.attachmentId === null,
+    ),
+  ).toBe(true);
+  await pool.query(
+    `UPDATE "Send" SET status='SENT',"deliveryState"='DONE',"sentAt"=now() WHERE "campaignId" IN (SELECT id FROM "Campaign" WHERE "userId"=$1)`,
+    [userId],
+  );
+  await expect(
+    page.getByRole("region", { name: "Campaign delivery progress" }),
+  ).toContainText("Delivery Complete", { timeout: 15000 });
+  await page.goto("/compose");
+  await expect(page.getByText(/Last Sent:/).first()).toBeVisible();
+});
+
+test("progress distinguishes uncertain outcomes and includes the user queue in estimates", async ({
+  page,
+  userId,
+}) => {
+  const template = randomUUID(),
+    contact = randomUUID(),
+    campaign = randomUUID(),
+    otherCampaign = randomUUID();
+  await pool.query(
+    'UPDATE "User" SET "preferredRoles"=$2,"nextSendAt"=$3 WHERE id=$1',
+    [userId, ["Engineer"], new Date(Date.now() + 120000)],
+  );
+  await pool.query(
+    `INSERT INTO "Template" (id,"userId",name,subject,body) VALUES ($1,$2,'Progress','Hi','Hello')`,
+    [template, userId],
+  );
+  await pool.query(
+    `INSERT INTO "Contact" (id,"userId",name,email,"jobRole") VALUES ($1,$2,'Alex','alex@example.test','Engineer')`,
+    [contact, userId],
+  );
+  for (const id of [campaign, otherCampaign])
+    await pool.query(
+      `INSERT INTO "Campaign" (id,"userId","templateId",status) VALUES ($1,$2,$3,'QUEUED')`,
+      [id, userId, template],
+    );
+  for (const [id, status, state] of [
+    [campaign, "QUEUED", "READY"],
+    [campaign, "SENT", "DONE"],
+    [campaign, "FAILED", "DONE"],
+    [campaign, "FAILED", "UNCERTAIN"],
+    [otherCampaign, "QUEUED", "READY"],
+  ])
+    await pool.query(
+      'INSERT INTO "Send" (id,"campaignId","contactId",status,"deliveryState") VALUES ($1,$2,$3,$4::"SendStatus",$5::"DeliveryState")',
+      [randomUUID(), id, contact, status, state],
+    );
+  await page.goto(`/history?campaign=${campaign}`);
+  const card = page.getByRole("region", { name: "Campaign delivery progress" });
+  await expect(card).toContainText("Delivery needs review");
+  await expect(card).toContainText("Approximate remaining:", {
+    timeout: 15000,
+  });
+  await expect(card).toContainText("Retries and service delays");
+  await page.getByLabel("Theme", { exact: true }).selectOption("dark");
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  expect(
+    await card
+      .locator(".progress-change")
+      .first()
+      .evaluate((e) => getComputedStyle(e).animationDuration),
+  ).toBe("1e-05s");
+  await page.goto(`/history?campaign=${randomUUID()}`);
+  await expect(
+    page.getByRole("region", { name: "Campaign delivery progress" }),
+  ).toHaveCount(0);
 });

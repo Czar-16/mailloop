@@ -1,3 +1,4 @@
+import { DateTime } from "@/components/date-time";
 import Link from "next/link";
 import { requireUser } from "@/lib/session";
 import { db } from "@/lib/db";
@@ -34,6 +35,17 @@ export default async function Contacts({
   const [contacts, total, existing, editing] = await Promise.all([
     db.contact.findMany({
       where,
+      include: {
+        sends: {
+          where: {
+            campaign: { userId: user.id },
+            status: { in: ["SENT", "REPLIED"] },
+          },
+          select: { sentAt: true },
+          orderBy: { sentAt: "desc" },
+          take: 1,
+        },
+      },
       orderBy: { createdAt: "desc" },
       take: 20,
       skip: (page - 1) * 20,
@@ -56,7 +68,7 @@ export default async function Contacts({
         title="Contacts"
         description="Build your shortlist, one person or one CSV at a time."
       />
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <section>
           <form method="get" action="/contacts" className="mb-4 flex gap-2">
             <label htmlFor="contact-search" className="sr-only">
@@ -90,6 +102,8 @@ export default async function Contacts({
                   <tr>
                     <th>Person</th>
                     <th>Company</th>
+                    <th>Job Role</th>
+                    <th>Last Sent</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -103,14 +117,17 @@ export default async function Contacts({
                         <p className="mt-1 max-w-64 break-all text-xs text-body">
                           {c.email}
                         </p>
-                        {c.tag && (
-                          <p className="mt-1 max-w-64 break-words text-xs text-body">
-                            {c.tag}
-                          </p>
-                        )}
                       </td>
                       <td className="max-w-40 break-words text-body">
                         {c.company || "—"}
+                      </td>
+                      <td className="max-w-40 break-words text-body">
+                        {c.jobRole || "Choose a job role"}
+                      </td>
+                      <td className="whitespace-nowrap text-xs text-body">
+                        <DateTime
+                          value={c.sends[0]?.sentAt?.toISOString() ?? null}
+                        />
                       </td>
                       <td>
                         <div className="flex">
@@ -136,12 +153,16 @@ export default async function Contacts({
             query={{ q }}
           />
           <div className="mt-8">
-            <ContactImport existingEmails={existing.map((c) => c.email)} />
+            <ContactImport
+              roles={user.preferredRoles}
+              existingEmails={existing.map((c) => c.email)}
+            />
           </div>
         </section>
         <ContactForm
           key={editing?.id ?? "new"}
           contact={editing ?? undefined}
+          roles={user.preferredRoles}
         />
       </div>
     </>

@@ -34,7 +34,7 @@ export default async function Templates({
         title="Templates"
         description="Start with a good introduction. Make it personal for every recipient."
       />
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
         <section className="space-y-4">
           {!templates.length ? (
             <EmptyState

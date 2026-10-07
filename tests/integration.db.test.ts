@@ -59,7 +59,10 @@ let contactId: string;
 const request = (recipientIds = [contactId], extra = {}) => ({
   templateId,
   recipientIds,
-  role: "Engineer",
+  recipientRoles: Object.fromEntries(
+    recipientIds.map((id) => [id, "Engineer"]),
+  ),
+  attachResume: false,
   idempotencyKey: randomUUID(),
   ...extra,
 });
@@ -122,6 +125,113 @@ describe.runIf(enabled)(
     });
     afterAll(async () => {
       await db.$disconnect();
+    });
+    it("snapshots mixed roles, links, and explicit PDF choices independently", async () => {
+      await db.contact.updateMany({
+        where: { id: contactId, userId },
+        data: { jobRole: "SDE Intern" },
+      });
+      const second = await db.contact.create({
+        data: {
+          userId,
+          name: "Sam",
+          email: "sam@example.test",
+          jobRole: "Frontend Developer",
+        },
+      });
+      await db.user.update({
+        where: { id: userId },
+        data: { resumeUrl: "https://example.com/first" },
+      });
+      await db.template.updateMany({
+        where: { id: templateId, userId },
+        data: { body: "Hi {{name}}: {{role}}. {{resume_link}}" },
+      });
+      const pdf = Buffer.from("%PDF-1.4\n%%EOF");
+      await storeLocalResume(
+        userId,
+        new File([pdf], "first.pdf", { type: "application/pdf" }),
+      );
+      const campaign = await createCampaign(
+        userId,
+        request([contactId, second.id], {
+          recipientRoles: { [second.id]: "Backend Developer" },
+          attachResume: false,
+        }),
+      );
+      const saved = await db.campaign.findFirstOrThrow({
+        where: { id: campaign.id, userId },
+        include: { sends: true },
+      });
+      expect(saved.attachmentId).toBeNull();
+      expect(saved.sends.map((s) => s.recipientRole).sort()).toEqual([
+        "Backend Developer",
+        "SDE Intern",
+      ]);
+      expect(
+        saved.sends.every((s) => s.body.includes("https://example.com/first")),
+      ).toBe(true);
+      await db.user.update({
+        where: { id: userId },
+        data: { resumeUrl: "https://example.com/second" },
+      });
+      await db.contact.updateMany({
+        where: { id: second.id, userId },
+        data: { jobRole: "Designer" },
+      });
+      expect(
+        (
+          await db.send.findMany({
+            where: { campaignId: campaign.id, campaign: { userId } },
+          })
+        ).every((s) => s.body.includes("https://example.com/first")),
+      ).toBe(true);
+      await deliverOne(userId, saved.sends[0].id);
+      const mime = Buffer.from(
+        mocks.send.mock.calls[0][0].requestBody.raw,
+        "base64url",
+      ).toString();
+      expect(mime).not.toContain("application/pdf");
+    });
+    it("requires legacy roles, saved links, and an owned current PDF", async () => {
+      await expect(
+        createCampaign(userId, request([contactId], { recipientRoles: {} })),
+      ).rejects.toThrow("job role");
+      await expect(
+        createCampaign(userId, request([contactId], { attachResume: true })),
+      ).rejects.toThrow("PDF");
+      await db.template.updateMany({
+        where: { id: templateId, userId },
+        data: { body: "{{resume_link}}" },
+      });
+      await expect(createCampaign(userId, request())).rejects.toThrow(
+        "resume URL",
+      );
+      await db.user.update({
+        where: { id: userId },
+        data: { resumeUrl: "https://example.com/resume" },
+      });
+      await expect(
+        createCampaign(
+          userId,
+          request([contactId], { recipientRoles: { [otherId]: "Engineer" } }),
+        ),
+      ).rejects.toThrow("selected recipients");
+      const foreign = await db.attachment.create({
+        data: {
+          userId: otherId,
+          fileName: "foreign.pdf",
+          storagePath: "foreign",
+        },
+      });
+      await db.user.update({
+        where: { id: userId },
+        data: { currentAttachmentId: foreign.id },
+      });
+      await expect(
+        createCampaign(userId, request([contactId], { attachResume: true })),
+      ).rejects.toThrow("PDF");
+      expect(await db.campaign.count({ where: { userId } })).toBe(0);
     });
     it("recovers failed event publication with one stable event per recipient", async () => {
       const second = await db.contact.create({
@@ -427,7 +537,10 @@ describe.runIf(enabled)(
         userId,
         new File([pdf], "first.pdf", { type: "application/pdf" }),
       );
-      const campaign = await createCampaign(userId, request());
+      const campaign = await createCampaign(
+        userId,
+        request([contactId], { attachResume: true }),
+      );
       await storeLocalResume(
         userId,
         new File([pdf], "second.pdf", { type: "application/pdf" }),

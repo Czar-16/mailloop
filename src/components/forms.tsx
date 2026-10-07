@@ -12,6 +12,8 @@ import {
 } from "@/lib/actions";
 import type { ActionResult } from "@/lib/errors";
 import Link from "next/link";
+import { suggestName } from "@/lib/imports";
+import { RoleChoices } from "@/components/preferences";
 
 export function useUnsavedChanges(dirty: boolean, preserveQuery = false) {
   useEffect(() => {
@@ -117,6 +119,10 @@ export function DeleteButton({
     </>
   );
 }
+const example = {
+  subject: "Exploring {{role}} opportunities",
+  body: "Hi {{name}},\n\nI’m interested in {{role}} opportunities at {{company}}. I’d love to share how my experience could help your team.\n\nThank you for your time.",
+};
 export function TemplateForm({
   template,
 }: {
@@ -128,6 +134,9 @@ export function TemplateForm({
   useUnsavedChanges(dirty);
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
+  const focusedField = useRef<HTMLInputElement | HTMLTextAreaElement | null>(
+    null,
+  );
   useEffect(() => {
     if (!pending && result?.ok === false)
       formRef.current
@@ -156,6 +165,77 @@ export function TemplateForm({
       <h2 className="text-xl font-semibold tracking-tight">
         {template ? "Edit Template" : "New Template"}
       </h2>
+      <p className="text-sm text-body">
+        Write placeholders in templates: {"{{name}}, {{company}}, {{role}}"}.
+        Enter actual values in Contacts and Compose. {"{{resume_link}}"} uses
+        your saved HTTPS URL in the message body.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {["name", "company", "role", "resume_link"].map((token) => (
+          <Button
+            key={token}
+            type="button"
+            variant="outline"
+            disabled={pending}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              const focused = focusedField.current;
+              const field =
+                token !== "resume_link" &&
+                focused &&
+                ["subject", "body"].includes(focused.name)
+                  ? focused
+                  : formRef.current?.querySelector<HTMLTextAreaElement>(
+                      "[name=body]",
+                    );
+              if (field) {
+                field.setRangeText(
+                  `{{${token}}}`,
+                  field.selectionStart ?? field.value.length,
+                  field.selectionEnd ?? field.value.length,
+                  "end",
+                );
+                field.focus();
+                setDirty(true);
+              }
+            }}
+          >
+            Insert {`{{${token}}}`}
+          </Button>
+        ))}
+      </div>
+      {!template && (
+        <details open>
+          <summary className="min-h-11 cursor-pointer">
+            Reference Template
+          </summary>
+          <p className="mt-3 text-sm">{example.subject}</p>
+          <p className="my-3 whitespace-pre-wrap text-sm">{example.body}</p>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={pending}
+            onClick={() => {
+              if (
+                dirty &&
+                !window.confirm(
+                  "Replace your current subject and message with the example?",
+                )
+              )
+                return;
+              for (const key of ["subject", "body"] as const) {
+                const field = formRef.current?.querySelector<HTMLInputElement>(
+                  `[name=${key}]`,
+                );
+                if (field) field.value = example[key];
+              }
+              setDirty(true);
+            }}
+          >
+            Use Example
+          </Button>
+        </details>
+      )}
       {template && <input type="hidden" name="id" value={template.id} />}
       <div>
         <label
@@ -188,6 +268,9 @@ export function TemplateForm({
           Subject
         </label>
         <Input
+          onFocus={(e) => {
+            focusedField.current = e.currentTarget;
+          }}
           id="template-subject"
           disabled={pending}
           aria-invalid={!!result?.fieldErrors?.subject}
@@ -211,6 +294,9 @@ export function TemplateForm({
           Message
         </label>
         <Textarea
+          onFocus={(e) => {
+            focusedField.current = e.currentTarget;
+          }}
           id="template-body"
           disabled={pending}
           aria-invalid={!!result?.fieldErrors?.body}
@@ -248,16 +334,20 @@ export function TemplateForm({
 }
 export function ContactForm({
   contact,
+  roles = [],
 }: {
+  roles?: string[];
   contact?: {
     id: string;
     name: string;
     email: string;
     company: string | null;
-    notes: string | null;
-    tag: string | null;
+    jobRole: string | null;
   };
 }) {
+  const manualName = useRef(!!contact?.name);
+  const [name, setName] = useState(contact?.name ?? "");
+  const [jobRole, setJobRole] = useState(contact?.jobRole ?? "");
   const [result, setResult] = useState<ActionResult>();
   const [pending, start] = useTransition();
   const [dirty, setDirty] = useState(false);
@@ -283,7 +373,12 @@ export function ContactForm({
           setResult(r);
           if (r.ok) {
             setDirty(false);
-            if (!contact) formRef.current?.reset();
+            if (!contact) {
+              formRef.current?.reset();
+              setName("");
+              setJobRole("");
+              manualName.current = false;
+            }
             router.refresh();
           }
         });
@@ -296,19 +391,24 @@ export function ContactForm({
       {(
         [
           {
-            name: "name",
-            label: "Name",
-            placeholder: "Alex Morgan…",
-            max: 120,
-          },
-          {
             name: "email",
             label: "Email",
             placeholder: "alex@company.com…",
             max: 254,
           },
+          {
+            name: "name",
+            label: "Name",
+            placeholder: "Alex Morgan…",
+            max: 120,
+          },
           { name: "company", label: "Company", placeholder: "Acme…", max: 160 },
-          { name: "tag", label: "Tag", placeholder: "Engineering…", max: 50 },
+          {
+            name: "jobRole",
+            label: "Job Role",
+            placeholder: "SDE Intern…",
+            max: 160,
+          },
         ] as const
       ).map((f) => (
         <div key={f.name}>
@@ -317,7 +417,7 @@ export function ContactForm({
             className="mb-2 block text-sm font-medium"
           >
             {f.label}
-            {!["name", "email"].includes(f.name) && (
+            {f.name === "company" && (
               <span className="ml-2 font-normal text-body">Optional</span>
             )}
           </label>
@@ -330,8 +430,28 @@ export function ContactForm({
             }
             name={f.name}
             type={f.name === "email" ? "email" : "text"}
-            defaultValue={contact?.[f.name] ?? ""}
-            required={["name", "email"].includes(f.name)}
+            defaultValue={
+              f.name === "email" || f.name === "company"
+                ? (contact?.[f.name] ?? "")
+                : undefined
+            }
+            value={
+              f.name === "name"
+                ? name
+                : f.name === "jobRole"
+                  ? jobRole
+                  : undefined
+            }
+            onChange={(e) => {
+              if (f.name === "name") {
+                manualName.current = true;
+                setName(e.target.value);
+              }
+              if (f.name === "email" && !manualName.current)
+                setName(suggestName(e.target.value));
+              if (f.name === "jobRole") setJobRole(e.target.value);
+            }}
+            required={f.name !== "company"}
             maxLength={f.max}
             autoComplete="off"
             spellCheck={f.name !== "email"}
@@ -340,22 +460,18 @@ export function ContactForm({
           <FieldError result={result} name={f.name} />
         </div>
       ))}
-      <div>
-        <label
-          htmlFor="contact-notes"
-          className="mb-2 block text-sm font-medium"
-        >
-          Notes <span className="font-normal text-body">Optional</span>
-        </label>
-        <Textarea
-          id="contact-notes"
-          disabled={pending}
-          name="notes"
-          defaultValue={contact?.notes ?? ""}
-          maxLength={2000}
-          autoComplete="off"
-        />
-      </div>
+      <p className="text-xs text-body">
+        Names from email addresses are suggestions. Correct them before saving.
+        Enter actual names, companies, and roles here.
+      </p>
+      <RoleChoices
+        roles={roles}
+        disabled={pending}
+        onChoose={(r) => {
+          setJobRole(r);
+          setDirty(true);
+        }}
+      />
       <Feedback result={result} />
       <div className="flex gap-2">
         <Button type="submit" disabled={pending}>

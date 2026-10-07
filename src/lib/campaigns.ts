@@ -44,8 +44,10 @@ export async function createCampaign(userId: string, input: unknown) {
         where: { id: data.templateId, userId, archivedAt: null },
       });
       if (!template) throw new AppError("Choose an available template.");
-      if (/{{\s*role\s*}}/.test(template.subject + template.body) && !data.role)
-        throw new AppError("Enter the role used by this template.", "role");
+      if (/{{\s*resume_link\s*}}/.test(template.body) && !user.resumeUrl)
+        throw new AppError(
+          "Save an HTTPS resume URL in Settings for this template.",
+        );
       const contacts = await tx.contact.findMany({
         where: { id: { in: data.recipientIds }, userId, archivedAt: null },
       });
@@ -99,13 +101,35 @@ export async function createCampaign(userId: string, input: unknown) {
         throw new AppError(
           "This campaign would exceed 500 emails in 24 hours, including queued emails.",
         );
-      const attachment = user.currentAttachmentId
-        ? await tx.attachment.findFirst({
-            where: { id: user.currentAttachmentId, userId, deletedAt: null },
-          })
-        : null;
+      const attachment =
+        data.attachResume && user.currentAttachmentId
+          ? await tx.attachment.findFirst({
+              where: { id: user.currentAttachmentId, userId, deletedAt: null },
+            })
+          : null;
+      if (
+        Object.keys(data.recipientRoles).some(
+          (id) => !data.recipientIds.includes(id),
+        )
+      )
+        throw new AppError(
+          "Role overrides must belong to selected recipients.",
+        );
+      if (data.attachResume && !attachment)
+        throw new AppError(
+          "Upload a resume PDF in Settings or turn off Attach Resume.",
+        );
       const snapshots = selected.map((c) => {
-        const values = { name: c.name, company: c.company, role: data.role };
+        const role = data.recipientRoles[c.id] ?? c.jobRole;
+        if (!role?.trim())
+          throw new AppError("Choose a job role for every recipient.", "role");
+        const values = {
+          name: c.name,
+          company: c.company,
+          role,
+          resume_link: user.resumeUrl,
+        };
+
         const subject = renderTemplate(template.subject, values);
         if (/[\r\n]/.test(subject))
           throw new AppError(
@@ -117,6 +141,7 @@ export async function createCampaign(userId: string, input: unknown) {
           contactId: c.id,
           recipientEmail: c.email,
           recipientName: c.name,
+          recipientRole: role,
           recipientCompany: c.company ?? "",
           templateName: template.name,
           subject,
@@ -128,7 +153,7 @@ export async function createCampaign(userId: string, input: unknown) {
         data: {
           userId,
           templateId: template.id,
-          role: data.role,
+          role: "",
           status: "QUEUED",
           idempotencyKey: data.idempotencyKey,
           attachmentId: attachment?.id,

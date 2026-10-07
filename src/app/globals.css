@@ -2,16 +2,37 @@
 
 :root {
   color-scheme: light;
-  --background: #fafafa;
+  --background: #f8fafc;
   --foreground: #171717;
   --card: #ffffff;
-  --primary: #171717;
+  --primary: #1d4ed8;
   --primary-foreground: #ffffff;
   --muted: #f2f2f2;
   --muted-foreground: #4d4d4d;
-  --border: #ebebeb;
+  --border: #dbe2ec;
   --ring: #0070f3;
   --destructive: #c50000;
+  --body: #475569;
+  --link: #1d4ed8;
+  --warning: #92400e;
+  --warning-soft: #ffefcf;
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #10141c;
+  --foreground: #edf2fa;
+  --card: #181e29;
+  --primary: #93b4ff;
+  --primary-foreground: #10141c;
+  --muted: #222c3a;
+  --muted-foreground: #bac7db;
+  --border: #3c495e;
+  --ring: #93b4ff;
+  --body: #bac7db;
+  --link: #93b4ff;
+  --destructive: #ff9d9d;
+  --warning: #ffc680;
+  --warning-soft: #392d1c;
 }
 @theme inline {
   --color-background: var(--background);
@@ -24,11 +45,11 @@
   --color-border: var(--border);
   --color-ring: var(--ring);
   --color-destructive: var(--destructive);
-  --color-body: #4d4d4d;
-  --color-link: #0761d1;
-  --color-error-deep: #c50000;
-  --color-warning: #ab570a;
-  --color-warning-soft: #ffefcf;
+  --color-body: var(--body);
+  --color-link: var(--link);
+  --color-error-deep: var(--destructive);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --radius-sm: 6px;
@@ -59,9 +80,10 @@
     text-underline-offset: 3px;
   }
   a.text-link:hover {
-    color: #171717;
+    color: var(--foreground);
   }
   a:focus-visible,
+  [tabindex]:focus-visible,
   summary:focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: 4px;
@@ -103,7 +125,7 @@
   th {
     text-align: left;
     font-weight: 500;
-    color: #4d4d4d;
+    color: var(--body);
   }
   th,
   td {
@@ -111,6 +133,8 @@
     border-bottom: 1px solid var(--border);
   }
   dialog {
+    background: var(--card);
+    color: var(--foreground);
     border: 1px solid var(--border);
     border-radius: 12px;
     margin: auto;
@@ -140,7 +164,7 @@
   line-height: 16px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #4d4d4d;
+  color: var(--body);
 }
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -150,4 +174,16 @@
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+@keyframes progress-change {
+  from {
+    opacity: 0.65;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.progress-change {
+  animation: progress-change 180ms ease-out;
 }

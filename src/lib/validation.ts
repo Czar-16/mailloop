@@ -8,8 +8,7 @@ export const contactSchema = z.object({
   name: z.string().trim().min(1, "Enter a name.").max(120),
   email: normalizedEmail,
   company: z.string().trim().max(160).default(""),
-  notes: z.string().trim().max(2000).default(""),
-  tag: z.string().trim().max(50).default(""),
+  jobRole: z.string().trim().min(1, "Choose a job role.").max(160),
 });
 export const templateSchema = z
   .object({
@@ -27,14 +26,23 @@ export const templateSchema = z
       const tokens = [...v[field].matchAll(/{{\s*([^{}]+?)\s*}}/g)];
       if (
         tokens.some(
-          (t) => !["name", "company", "role"].includes(t[1].trim()),
+          (t) =>
+            ![
+              "name",
+              "company",
+              "role",
+              ...(field === "body" ? ["resume_link"] : []),
+            ].includes(t[1].trim()),
         ) ||
-        /{{|}}/.test(v[field].replace(/{{\s*(name|company|role)\s*}}/g, ""))
+        /{{|}}/.test(
+          v[field].replace(/{{\s*(name|company|role|resume_link)\s*}}/g, ""),
+        )
       ) {
         ctx.addIssue({
           code: "custom",
           path: [field],
-          message: "Use only {{name}}, {{company}}, and {{role}} placeholders.",
+          message:
+            "Use {{name}}, {{company}}, {{role}}, and {{resume_link}} (body only).",
         });
       }
     }
@@ -46,16 +54,24 @@ export const campaignSchema = z.object({
     .min(1)
     .max(15)
     .refine((v) => new Set(v).size === v.length, "Select each recipient once."),
-  role: z.string().trim().max(160).default(""),
+  recipientRoles: z
+    .record(z.uuid(), z.string().trim().min(1).max(160))
+    .default({}),
+  attachResume: z.boolean(),
   resendIds: z.array(z.uuid()).max(15).default([]),
   idempotencyKey: z.uuid(),
 });
 export function renderTemplate(
   text: string,
-  values: { name: string; company?: string | null; role: string },
+  values: {
+    name: string;
+    company?: string | null;
+    role: string;
+    resume_link?: string | null;
+  },
 ) {
   return text.replace(
-    /{{\s*(name|company|role)\s*}}/g,
+    /{{\s*(name|company|role|resume_link)\s*}}/g,
     (_, key: keyof typeof values) => values[key] ?? "",
   );
 }
@@ -69,3 +85,25 @@ export function validatePdf(bytes: Uint8Array, type: string) {
   )
     throw new Error("The file must be a PDF.");
 }
+
+export const preferredRolesSchema = z
+  .array(z.string().trim().min(1).max(160))
+  .min(1)
+  .max(5)
+  .refine(
+    (v) => new Set(v.map((r) => r.toLowerCase())).size === v.length,
+    "Choose unique roles.",
+  );
+export const resumeUrlSchema = z
+  .string()
+  .trim()
+  .max(2048)
+  .refine((value) => {
+    if (!value) return true;
+    try {
+      const url = new URL(value);
+      return url.protocol === "https:" && !url.username && !url.password;
+    } catch {
+      return false;
+    }
+  }, "Enter an HTTPS resume URL.");

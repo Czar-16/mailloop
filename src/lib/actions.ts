@@ -3,8 +3,13 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireUser } from "@/lib/session";
 import { db } from "@/lib/db";
-import { contactSchema, templateSchema } from "@/lib/validation";
-import { parseContacts } from "@/lib/imports";
+import {
+  contactSchema,
+  templateSchema,
+  preferredRolesSchema,
+  resumeUrlSchema,
+} from "@/lib/validation";
+import { parseContacts, validateImportRows } from "@/lib/imports";
 import { AppError, type ActionResult } from "@/lib/errors";
 import { createCampaign } from "@/lib/campaigns";
 import { dispatchPending, inngest } from "@/lib/inngest";
@@ -111,20 +116,34 @@ export async function archiveContact(id: string) {
     };
   });
 }
-export async function importContacts(text: string) {
+export async function importContacts(input: unknown) {
   const user = await requireUser();
   return result(async () => {
     const existing = await db.contact.findMany({
       where: { userId: user.id },
       select: { email: true },
     });
-    const rows = parseContacts(
-      z
-        .string()
-        .max(1024 * 1024)
-        .parse(text),
-      existing.map((c) => c.email),
-    );
+    const rows =
+      typeof input === "string"
+        ? parseContacts(
+            z
+              .string()
+              .max(1024 * 1024)
+              .parse(input),
+            existing.map((c) => c.email),
+          )
+        : validateImportRows(
+            z
+              .array(contactSchema)
+              .max(1000)
+              .parse(input)
+              .map((r, i) => ({ ...r, row: i + 1 })),
+            existing.map((c) => c.email),
+          );
+    if (rows.some((r) => r.state === "invalid"))
+      throw new AppError(
+        "Correct every unresolved name, email, and job role before importing.",
+      );
     const data = rows
       .filter((r) => r.state === "valid")
       .map((r) => ({
@@ -132,6 +151,7 @@ export async function importContacts(text: string) {
         name: r.name,
         email: r.email,
         company: r.company,
+        jobRole: r.jobRole,
       }));
     const saved = await db.contact.createMany({ data, skipDuplicates: true });
     revalidatePath("/contacts");
@@ -172,5 +192,23 @@ export async function refreshReplies() {
       ok: true,
       message: "Reply check queued. History updates automatically.",
     };
+  });
+}
+
+export async function savePreferences(input: unknown) {
+  const user = await requireUser();
+  return result(async () => {
+    const data = z
+      .object({
+        preferredRoles: preferredRolesSchema,
+        resumeUrl: resumeUrlSchema,
+      })
+      .parse(input);
+    await db.user.update({
+      where: { id: user.id },
+      data: { ...data, resumeUrl: data.resumeUrl || null },
+    });
+    revalidatePath("/", "layout");
+    return { ok: true, message: "Preferences saved." };
   });
 }

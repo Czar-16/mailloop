@@ -1,3 +1,4 @@
+import { CampaignProgress } from "@/components/campaign-progress";
 import { requireUser } from "@/lib/session";
 import { db } from "@/lib/db";
 import { quotaWhere } from "@/lib/campaigns";
@@ -12,7 +13,12 @@ export const metadata = { title: "History" };
 export default async function History({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; q?: string; page?: string }>;
+  searchParams: Promise<{
+    status?: string;
+    q?: string;
+    page?: string;
+    campaign?: string;
+  }>;
 }) {
   const user = await requireUser();
   const params = await searchParams;
@@ -73,14 +79,83 @@ export default async function History({
         where: { campaign: { userId: user.id }, status: "QUEUED" },
       }),
     ]);
+  const focused = params.campaign
+    ? await db.campaign.findFirst({
+        where: { id: params.campaign, userId: user.id },
+        select: {
+          id: true,
+          createdAt: true,
+          sends: {
+            select: {
+              status: true,
+              deliveryState: true,
+              dispatchedAt: true,
+              sentAt: true,
+              attemptedAt: true,
+            },
+          },
+        },
+      })
+    : null;
+  const outstanding = focused
+    ? await db.send.count({
+        where: {
+          campaign: { userId: user.id },
+          status: "QUEUED",
+          deliveryState: { not: "UNCERTAIN" },
+        },
+      })
+    : 0;
+  const progress = focused
+    ? {
+        id: focused.id,
+        observedAt: new Date().toISOString(),
+        createdAt: focused.createdAt.toISOString(),
+        finishedAt: focused.sends.every(
+          (s) => s.status !== "QUEUED" && s.deliveryState !== "UNCERTAIN",
+        )
+          ? (focused.sends
+              .map((s) => s.sentAt ?? s.attemptedAt ?? focused.createdAt)
+              .sort((a, b) => b.getTime() - a.getTime())[0]
+              ?.toISOString() ?? focused.createdAt.toISOString())
+          : null,
+        queued: focused.sends.filter(
+          (s) => s.status === "QUEUED" && s.deliveryState !== "UNCERTAIN",
+        ).length,
+        sent: focused.sends.filter(
+          (s) =>
+            ["SENT", "REPLIED"].includes(s.status) &&
+            s.deliveryState !== "UNCERTAIN",
+        ).length,
+        failed: focused.sends.filter(
+          (s) => s.status === "FAILED" && s.deliveryState !== "UNCERTAIN",
+        ).length,
+        review: focused.sends.filter((s) => s.deliveryState === "UNCERTAIN")
+          .length,
+        pendingDispatch: focused.sends.some(
+          (s) =>
+            s.status === "QUEUED" &&
+            !s.dispatchedAt &&
+            s.deliveryState !== "UNCERTAIN",
+        ),
+        outstanding,
+        nextSendAt: user.nextSendAt?.toISOString() ?? null,
+      }
+    : null;
   return (
     <>
       <PageHeading
         eyebrow="Every introduction, in view"
         title="History"
         description="Follow your messages from the queue to a new conversation."
-        action={<HistoryControls hasQueued={queued > 0} />}
+        action={
+          <HistoryControls
+            hasQueued={queued > 0}
+            autoRefresh={!progress || (!progress.queued && !progress.review)}
+          />
+        }
       />
+      {progress && <CampaignProgress data={progress} />}
       <div className="mb-8 grid gap-4 sm:grid-cols-3">
         {[
           {
@@ -113,6 +188,7 @@ export default async function History({
         action="/history"
         className="mb-4 flex flex-wrap gap-3"
       >
+        {focused && <input type="hidden" name="campaign" value={focused.id} />}
         <label htmlFor="history-search" className="sr-only">
           Search history
         </label>
@@ -152,7 +228,12 @@ export default async function History({
           link="Compose an Email"
         />
       ) : (
-        <div className="panel overflow-x-auto">
+        <div
+          role="region"
+          aria-label="Delivery history table"
+          tabIndex={0}
+          className="panel overflow-x-auto"
+        >
           <table className="w-full text-sm">
             <caption className="sr-only">Email delivery history</caption>
             <thead>
@@ -185,7 +266,13 @@ export default async function History({
                     <DateTime value={s.sentAt?.toISOString() ?? null} />
                   </td>
                   <td>
-                    <Status status={s.status} />
+                    {s.deliveryState === "UNCERTAIN" ? (
+                      <span className="text-warning">
+                        Delivery needs review
+                      </span>
+                    ) : (
+                      <Status status={s.status} />
+                    )}
                     {s.error && (
                       <p className="mt-2 max-w-64 break-words text-xs leading-5 text-warning">
                         {s.error}
@@ -193,7 +280,7 @@ export default async function History({
                     )}
                     {s.status === "QUEUED" && !s.dispatchedAt && (
                       <p className="mt-2 text-xs text-body">
-                        Waiting for queue connection
+                        Waiting for delivery service
                       </p>
                     )}
                   </td>
@@ -207,7 +294,7 @@ export default async function History({
         path="/history"
         page={page}
         total={total}
-        query={{ q, status: status ?? "" }}
+        query={{ q, status: status ?? "", campaign: focused?.id ?? "" }}
       />
     </>
   );

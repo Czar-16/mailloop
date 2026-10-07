@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { themeScript } from "@/lib/theme";
 const sans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const mono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 export const metadata: Metadata = {
@@ -19,18 +20,25 @@ export const metadata: Metadata = {
     type: "website",
   },
 };
-export const viewport: Viewport = { themeColor: "#fafafa" };
+export const viewport: Viewport = { themeColor: "#f8fafc" };
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${sans.variable} ${mono.variable} antialiased`}>
+    <html
+      suppressHydrationWarning
+      lang="en"
+      className={`${sans.variable} ${mono.variable} antialiased`}
+    >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body className="min-h-screen">
         <a
           href="#main-content"
-          className="fixed left-4 top-4 z-50 -translate-y-24 rounded-sm bg-primary px-4 py-3 text-white focus:translate-y-0"
+          className="fixed left-4 top-4 z-50 -translate-y-24 rounded-sm bg-primary px-4 py-3 text-primary-foreground focus:translate-y-0"
         >
           Skip to content
         </a>

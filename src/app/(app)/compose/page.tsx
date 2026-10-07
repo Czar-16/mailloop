@@ -39,7 +39,13 @@ export default async function ComposePage({
     }),
     db.contact.findMany({
       where,
-      select: { id: true, name: true, email: true, company: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        company: true,
+        jobRole: true,
+      },
       orderBy: { name: "asc" },
       take: 20,
       skip: (page - 1) * 20,
@@ -66,6 +72,7 @@ export default async function ComposePage({
       recipientEmail: true,
       status: true,
       deliveryState: true,
+      sentAt: true,
     },
   });
   const recipients = contacts.map((c) => {
@@ -74,6 +81,12 @@ export default async function ComposePage({
     );
     return {
       ...c,
+      lastSent:
+        prior
+          .map((s) => s.sentAt)
+          .filter((d): d is Date => !!d)
+          .sort((a, b) => b.getTime() - a.getTime())[0]
+          ?.toISOString() ?? null,
       previouslySent: prior.some((s) => ["SENT", "REPLIED"].includes(s.status)),
       blocked: prior.some(
         (s) =>
@@ -108,6 +121,8 @@ export default async function ComposePage({
         templates={templates}
         contacts={recipients}
         used={used}
+        roles={user.preferredRoles}
+        resumeUrl={user.resumeUrl}
         resume={attachment?.fileName ?? null}
         connected={user.gmailAuthorized && !!user.encryptedRefreshToken}
       />

@@ -2,7 +2,9 @@ import { requireUser } from "@/lib/session";
 import { signOut } from "@/auth";
 import { Wordmark } from "@/components/common";
 import { Navigation } from "@/components/navigation";
-import { Button } from "@/components/ui/button";
+import { AccountMenu } from "@/components/account-menu";
+import { RoleSetup } from "@/components/preferences";
+import { ThemeControl } from "@/components/theme";
 export const dynamic = "force-dynamic";
 export const metadata = { robots: { index: false, follow: false } };
 export default async function AppLayout({
@@ -17,20 +19,16 @@ export default async function AppLayout({
         <div className="page-container flex flex-wrap items-center justify-between gap-3 py-4">
           <Wordmark />
           <div className="flex min-w-0 items-center gap-3">
-            <span className="hidden max-w-56 truncate text-sm text-body sm:block">
-              {user.email}
-            </span>
-            <form
-              action={async () => {
+            <ThemeControl />
+            <AccountMenu
+              name={user.name}
+              email={user.email}
+              signOut={async () => {
                 "use server";
                 await requireUser();
                 await signOut({ redirectTo: "/" });
               }}
-            >
-              <Button variant="ghost" type="submit">
-                Sign Out
-              </Button>
-            </form>
+            />
           </div>
           <div className="w-full pt-1">
             <Navigation />
@@ -38,6 +36,9 @@ export default async function AppLayout({
         </div>
       </header>
       <main id="main-content" className="page-container py-10 sm:py-12">
+        {!user.preferredRoles.length && (
+          <RoleSetup resumeUrl={user.resumeUrl} />
+        )}
         {children}
       </main>
       <footer className="page-container border-t border-border py-6 text-xs text-body">
