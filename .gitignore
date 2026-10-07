@@ -41,3 +41,11 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+!.env.example
+/uploads/
+/playwright-report/
+/test-results/
+# Licensed documentation stays local.
+/.agents/skills/tailwind-4-docs/references/docs/
+/.agents/skills/tailwind-4-docs/references/docs-index.tsx

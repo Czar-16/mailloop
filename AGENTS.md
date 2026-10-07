@@ -23,7 +23,8 @@ through their own Gmail account.
 - Use TypeScript.
 - Use the Next.js App Router.
 - Use server-side code for secrets and Gmail API operations.
-- Every server action and API route must authenticate the user.
+- Every user-facing server action and API route must authenticate the user.
+- Auth.js entrypoints validate OAuth before a session exists. Inngest callbacks must verify service signatures; Blob completion callbacks must verify the Blob service.
 - Always scope database queries by `userId`.
 - Never log OAuth tokens.
 - Never log email bodies.

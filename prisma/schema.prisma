@@ -17,6 +17,10 @@ model User {
   email                 String       @unique
   name                  String?
   encryptedRefreshToken String?
+  googleId              String?      @unique
+  gmailAuthorized       Boolean      @default(false)
+  nextSendAt            DateTime?
+  currentAttachmentId   String?
   createdAt             DateTime     @default(now())
   templates             Template[]
   contacts              Contact[]
@@ -25,48 +29,68 @@ model User {
 }
 
 model Template {
-  id        String     @id @default(uuid())
-  userId    String
-  name      String
-  subject   String
-  body      String
-  createdAt DateTime   @default(now())
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  campaigns Campaign[]
+  id         String     @id @default(uuid())
+  userId     String
+  name       String
+  subject    String
+  body       String
+  archivedAt DateTime?
+  createdAt  DateTime   @default(now())
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaigns  Campaign[]
 
   @@index([userId])
 }
 
 model Contact {
-  id        String   @id @default(uuid())
-  userId    String
-  name      String
-  email     String
-  company   String?
-  notes     String?
-  tag       String?
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sends     Send[]
+  id         String    @id @default(uuid())
+  userId     String
+  name       String
+  email      String
+  company    String?
+  notes      String?
+  tag        String?
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sends      Send[]
 
   @@unique([userId, email])
   @@index([userId])
 }
 
 model Campaign {
-  id         String   @id @default(uuid())
-  userId     String
-  templateId String
-  status     String
-  createdAt  DateTime @default(now())
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  template   Template @relation(fields: [templateId], references: [id])
-  sends      Send[]
+  id             String      @id @default(uuid())
+  userId         String
+  templateId     String
+  status         String
+  role           String      @default("")
+  idempotencyKey String?
+  attachmentId   String?
+  attachment     Attachment? @relation(fields: [attachmentId], references: [id], onDelete: Restrict)
+  createdAt      DateTime    @default(now())
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  template       Template    @relation(fields: [templateId], references: [id])
+  sends          Send[]
 
+  @@unique([userId, idempotencyKey])
   @@index([userId])
 }
 
 model Send {
+  createdAt        DateTime      @default(now())
+  recipientEmail   String        @default("")
+  recipientName    String        @default("")
+  recipientCompany String        @default("")
+  templateName     String        @default("")
+  subject          String        @default("")
+  body             String        @default("")
+  mimeMessageId    String?       @unique
+  deliveryState    DeliveryState @default(READY)
+  attemptedAt      DateTime?
+  dispatchedAt     DateTime?
+  lastCheckedAt    DateTime?
+
   id             String     @id @default(uuid())
   campaignId     String
   contactId      String
@@ -80,14 +104,17 @@ model Send {
 
   @@index([campaignId])
   @@index([contactId])
+  @@index([status, sentAt])
 }
 
 model Attachment {
-  id          String @id @default(uuid())
+  id          String     @id @default(uuid())
   userId      String
   fileName    String
+  createdAt   DateTime   @default(now())
+  campaigns   Campaign[]
   storagePath String
-  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
@@ -97,4 +124,11 @@ enum SendStatus {
   SENT
   FAILED
   REPLIED
+}
+
+enum DeliveryState {
+  READY
+  ATTEMPTING
+  UNCERTAIN
+  DONE
 }

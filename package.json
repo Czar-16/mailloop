@@ -6,25 +6,52 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "inngest:dev": "npx inngest-cli@latest dev -u http://localhost:3000/api/inngest",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
-    "@prisma/client": "^7.10.0",
+    "@prisma/adapter-pg": "7.10.0",
+    "@prisma/client": "7.10.0",
+    "@radix-ui/react-slot": "1.4.0",
+    "@vercel/blob": "2.8.1",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
     "googleapis": "^183.0.0",
+    "inngest": "4.22.0",
+    "lucide-react": "1.52.0",
     "next": "16.4.0",
     "next-auth": "^5.0.0-beta.32",
-    "prisma": "^7.10.0",
+    "nodemailer": "8.0.11",
+    "papaparse": "5.7.0",
+    "pg": "8.23.1",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "server-only": "0.0.1",
+    "tailwind-merge": "3.7.0",
+    "zod": "4.6.5"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@tailwindcss/turbopack": "^4",
-    "@types/node": "^20",
+    "@types/node": "22.20.5",
+    "@types/nodemailer": "8.0.2",
+    "@types/papaparse": "5.5.2",
+    "@types/pg": "8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.4.0",
+    "prisma": "7.10.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "tsx": "4.23.15",
+    "typescript": "^5",
+    "vitest": "5.0.3"
   }
 }
