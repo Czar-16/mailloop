@@ -6,7 +6,7 @@ Create templates, import contacts, preview up to 15 individual emails, attach a 
 
 ## Run locally
 
-Requirements: Node.js 24 LTS, npm, Docker Compose, and a Google OAuth web client with Gmail API enabled.
+Requirements: Node.js 24 LTS, npm 11.19.0 (matching CI), Docker Compose, and a Google OAuth web client with Gmail API enabled.
 
 1. Keep your existing `.env`, or copy `.env.example` to `.env` for a fresh checkout. Fill in the missing secrets; never commit `.env`.
 2. Run `npm ci` (generates Prisma Client).
