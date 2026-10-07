@@ -88,8 +88,8 @@ export function validatePdf(bytes: Uint8Array, type: string) {
 
 export const preferredRolesSchema = z
   .array(z.string().trim().min(1).max(160))
-  .min(1)
-  .max(5)
+  .min(1, "Save at least one preferred role.")
+  .max(5, "Save at most five preferred roles.")
   .refine(
     (v) => new Set(v.map((r) => r.toLowerCase())).size === v.length,
     "Choose unique roles.",

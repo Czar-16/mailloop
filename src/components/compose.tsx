@@ -193,13 +193,14 @@ export function Compose({
           <label className="mb-4 block text-sm">
             Filter by Job Role
             <select
+              aria-label="Filter by Job Role"
               name="roleFilter"
               className="ml-2"
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value)}
             >
               <option value="">All Roles</option>
-              {[...new Set([...roles, ...contacts.map((c) => c.jobRole ?? "")])]
+              {[...new Set([...roles, ...contacts.map(getRole)])]
                 .filter(Boolean)
                 .map((r) => (
                   <option key={r}>{r}</option>
@@ -217,7 +218,7 @@ export function Compose({
               </p>
             )}
             {contacts
-              .filter((c) => !roleFilter || c.jobRole === roleFilter)
+              .filter((c) => !roleFilter || getRole(c) === roleFilter)
               .map((c) => {
                 const checked = selected.some((s) => s.id === c.id);
                 return (

@@ -10,6 +10,7 @@
   --muted: #f2f2f2;
   --muted-foreground: #4d4d4d;
   --border: #dbe2ec;
+  --control-border: #8794a7;
   --ring: #0070f3;
   --destructive: #c50000;
   --body: #475569;
@@ -27,6 +28,7 @@
   --muted: #222c3a;
   --muted-foreground: #bac7db;
   --border: #3c495e;
+  --control-border: #687a94;
   --ring: #93b4ff;
   --body: #bac7db;
   --link: #93b4ff;
@@ -43,6 +45,7 @@
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-border: var(--border);
+  --color-control-border: var(--control-border);
   --color-ring: var(--ring);
   --color-destructive: var(--destructive);
   --color-body: var(--body);
@@ -103,7 +106,7 @@
   select {
     min-height: 44px;
     max-width: 100%;
-    border: 1px solid var(--border);
+    border: 1px solid var(--control-border);
     border-radius: 6px;
     padding: 8px 12px;
     background: var(--card);

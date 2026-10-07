@@ -72,8 +72,17 @@ describe("template and contact validation", () => {
         templateId: crypto.randomUUID(),
         idempotencyKey: crypto.randomUUID(),
         recipientIds: Array.from({ length: 16 }, () => crypto.randomUUID()),
+        attachResume: false,
       }).success,
     ).toBe(false);
+    expect(
+      campaignSchema.safeParse({
+        templateId: crypto.randomUUID(),
+        idempotencyKey: crypto.randomUUID(),
+        recipientIds: Array.from({ length: 15 }, () => crypto.randomUUID()),
+        attachResume: false,
+      }).success,
+    ).toBe(true);
     expect(() =>
       validatePdf(Buffer.from("not a pdf"), "application/pdf"),
     ).toThrow();

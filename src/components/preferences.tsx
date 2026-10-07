@@ -1,5 +1,5 @@
 "use client";
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { savePreferences } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
@@ -55,6 +55,17 @@ export function Preferences({
   const [dirty, setDirty] = useState(false);
   const [pending, start] = useTransition();
   const router = useRouter();
+  const customInput = useRef<HTMLInputElement>(null);
+  const urlInput = useRef<HTMLInputElement>(null);
+  const roleError = Object.entries(result?.fieldErrors ?? {}).find(([key]) =>
+    key.startsWith("preferredRoles"),
+  )?.[1];
+  useEffect(() => {
+    if (!pending && result?.ok === false) {
+      if (result.fieldErrors?.resumeUrl) urlInput.current?.focus();
+      else if (roleError) customInput.current?.focus();
+    }
+  }, [result, pending, roleError]);
   useUnsavedChanges(dirty);
   function add(role: string) {
     setDirty(true);
@@ -117,6 +128,9 @@ export function Preferences({
         <label className="block text-sm">
           Custom role
           <Input
+            ref={customInput}
+            aria-invalid={!!roleError}
+            aria-describedby={roleError ? "preference-role-error" : undefined}
             name="customRole"
             value={custom}
             maxLength={160}
@@ -125,6 +139,11 @@ export function Preferences({
             onChange={(e) => setCustom(e.target.value)}
           />
         </label>
+        {roleError && (
+          <p id="preference-role-error" className="text-xs text-error-deep">
+            {roleError}
+          </p>
+        )}
         <Button
           type="button"
           variant="outline"
@@ -137,6 +156,13 @@ export function Preferences({
           <label className="block text-sm">
             Resume URL (optional HTTPS link)
             <Input
+              ref={urlInput}
+              aria-invalid={!!result?.fieldErrors?.resumeUrl}
+              aria-describedby={
+                result?.fieldErrors?.resumeUrl
+                  ? "preference-url-error"
+                  : undefined
+              }
               name="resumeUrl"
               type="url"
               value={url}
@@ -150,6 +176,11 @@ export function Preferences({
               placeholder="https://example.com/resume…"
             />
           </label>
+        )}
+        {result?.fieldErrors?.resumeUrl && (
+          <p id="preference-url-error" className="text-xs text-error-deep">
+            {result.fieldErrors.resumeUrl}
+          </p>
         )}
         <Feedback result={result} />
         <Button disabled={pending}>

@@ -530,3 +530,96 @@ test("progress distinguishes uncertain outcomes and includes the user queue in e
     page.getByRole("region", { name: "Campaign delivery progress" }),
   ).toHaveCount(0);
 });
+
+test("attachment defaults, example replacement warning, and batch role filters", async ({
+  page,
+  userId,
+}) => {
+  await pool.query('UPDATE "User" SET "preferredRoles"=$2 WHERE id=$1', [
+    userId,
+    ["SDE Intern", "Frontend Developer"],
+  ]);
+  await page.goto("/settings");
+  await page
+    .getByLabel("Choose PDF", { exact: true })
+    .setInputFiles({
+      name: "resume.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4\n%%EOF"),
+    });
+  await page.getByRole("button", { name: "Save Resume", exact: true }).click();
+  await expect(
+    page.getByRole("link", { name: "resume.pdf", exact: true }),
+  ).toBeVisible();
+  await page.goto("/compose");
+  await expect(page.getByLabel("Attach Resume", { exact: true })).toBeChecked();
+  await page.getByLabel("Attach Resume", { exact: true }).uncheck();
+  await expect(page.getByText("PDF: None.", { exact: false })).toBeVisible();
+  await page.goto("/settings");
+  await page
+    .getByLabel("Resume URL (optional HTTPS link)")
+    .fill("https://example.com/resume");
+  await page
+    .getByRole("button", { name: "Save Preferences", exact: true })
+    .click();
+  await expect(
+    page.getByText("Preferences saved.", { exact: true }),
+  ).toBeVisible();
+  await page.goto("/compose");
+  await expect(
+    page.getByLabel("Attach Resume", { exact: true }),
+  ).not.toBeChecked();
+  await page.getByLabel("Attach Resume", { exact: true }).check();
+  await expect(
+    page.getByText("PDF: resume.pdf.", { exact: false }),
+  ).toBeVisible();
+  await page.goto("/templates");
+  await page.getByLabel("Subject", { exact: true }).fill("Keep this draft");
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await page.getByRole("button", { name: "Use Example", exact: true }).click();
+  await expect(page.getByLabel("Subject", { exact: true })).toHaveValue(
+    "Keep this draft",
+  );
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Use Example", exact: true }).click();
+  await page.getByLabel("Template name", { exact: true }).fill("Role Filters");
+  await page
+    .getByRole("button", { name: "Save Template", exact: true })
+    .click();
+  await expect(
+    page.getByText("Template saved.", { exact: true }),
+  ).toBeVisible();
+  await pool.query(
+    'INSERT INTO "Contact" (id,"userId",name,email,"jobRole") VALUES ($1,$2,$3,$4,$5)',
+    [randomUUID(), userId, "Alex", "alex@example.test", "SDE Intern"],
+  );
+  await page.goto("/compose");
+  await page.getByRole("checkbox", { name: /Alex/ }).check();
+  await page
+    .getByRole("button", { name: "Frontend Developer", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Apply Role to Selected", exact: true })
+    .click();
+  await page
+    .getByLabel("Filter by Job Role", { exact: true })
+    .selectOption("Frontend Developer");
+  await expect(page.getByRole("checkbox", { name: /Alex/ })).toBeVisible();
+  await expect(
+    page.getByLabel("Job Role for Alex", { exact: true }),
+  ).toHaveValue("Frontend Developer");
+  const saved = await pool.query(
+    'SELECT "jobRole" FROM "Contact" WHERE "userId"=$1',
+    [userId],
+  );
+  expect(saved.rows[0].jobRole).toBe("SDE Intern");
+  await page.getByRole("checkbox", { name: /Alex/ }).uncheck();
+  await page.goto("/");
+  await page.getByLabel("Theme", { exact: true }).selectOption("dark");
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.getByLabel("Theme", { exact: true }).selectOption("system");
+  await page.emulateMedia({ colorScheme: "light" });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+});

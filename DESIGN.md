@@ -14,6 +14,7 @@ The interface uses calm surfaces, thin borders, and restrained blue accents. The
 | Primary foreground | #ffffff | #10141c |
 | Muted surface      | #f2f2f2 | #222c3a |
 | Border             | #dbe2ec | #3c495e |
+| Control border     | #8794a7 | #687a94 |
 | Warning            | #92400e | #ffc680 |
 | Error              | #c50000 | #ff9d9d |
 
