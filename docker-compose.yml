@@ -1,0 +1,25 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: mailloop-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mailloop}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mailloop}
+      POSTGRES_DB: ${POSTGRES_DB:-mailloop}
+    ports:
+      - "5432:5432"
+    volumes:
+      - mailloop_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-mailloop} -d ${POSTGRES_DB:-mailloop}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mailloop_postgres_data:

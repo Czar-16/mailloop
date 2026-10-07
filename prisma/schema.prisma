@@ -1,0 +1,100 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                    String       @id @default(uuid())
+  email                 String       @unique
+  name                  String?
+  encryptedRefreshToken String?
+  createdAt             DateTime     @default(now())
+  templates             Template[]
+  contacts              Contact[]
+  campaigns             Campaign[]
+  attachments           Attachment[]
+}
+
+model Template {
+  id        String     @id @default(uuid())
+  userId    String
+  name      String
+  subject   String
+  body      String
+  createdAt DateTime   @default(now())
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaigns Campaign[]
+
+  @@index([userId])
+}
+
+model Contact {
+  id        String   @id @default(uuid())
+  userId    String
+  name      String
+  email     String
+  company   String?
+  notes     String?
+  tag       String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sends     Send[]
+
+  @@unique([userId, email])
+  @@index([userId])
+}
+
+model Campaign {
+  id         String   @id @default(uuid())
+  userId     String
+  templateId String
+  status     String
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  template   Template @relation(fields: [templateId], references: [id])
+  sends      Send[]
+
+  @@index([userId])
+}
+
+model Send {
+  id             String     @id @default(uuid())
+  campaignId     String
+  contactId      String
+  status         SendStatus @default(QUEUED)
+  sentAt         DateTime?
+  gmailMessageId String?
+  gmailThreadId  String?
+  error          String?
+  campaign       Campaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contact        Contact    @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@index([contactId])
+}
+
+model Attachment {
+  id          String @id @default(uuid())
+  userId      String
+  fileName    String
+  storagePath String
+  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+enum SendStatus {
+  QUEUED
+  SENT
+  FAILED
+  REPLIED
+}
