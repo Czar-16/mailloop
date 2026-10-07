@@ -19,10 +19,12 @@ export async function gmailForUser(userId: string) {
   return {
     gmail: google.gmail({ version: "v1", auth: oauth }),
     email: user.email,
+    name: user.name,
   };
 }
 export async function buildMime(input: {
   from: string;
+  fromName?: string | null;
   to: string;
   subject: string;
   body: string;
@@ -30,7 +32,7 @@ export async function buildMime(input: {
   attachment?: { fileName: string; bytes: Buffer };
 }) {
   const message = new MailComposer({
-    from: input.from,
+    from: { name: input.fromName?.trim() ?? "", address: input.from },
     to: input.to,
     subject: input.subject,
     text: input.body,

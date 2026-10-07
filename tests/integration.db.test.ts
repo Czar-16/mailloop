@@ -25,6 +25,7 @@ vi.mock("@/lib/gmail", async (importOriginal) => {
     ...actual,
     gmailForUser: vi.fn(async () => ({
       email: "sender@example.test",
+      name: "Anoop Jha",
       gmail: {
         users: {
           messages: { send: mocks.send, list: mocks.list, get: mocks.get },
@@ -441,12 +442,49 @@ describe.runIf(enabled)(
       });
       await deliverOne(userId, send.id);
       const raw = mocks.send.mock.calls[0][0].requestBody.raw;
-      expect(Buffer.from(raw, "base64url").toString()).toContain("first.pdf");
+      const mime = Buffer.from(raw, "base64url").toString();
+      expect(mime).toContain("first.pdf");
+      expect(mime).toMatch(/^From: Anoop Jha <sender@example.test>$/m);
+      expect((mime.match(/^To:/gm) ?? []).length).toBe(1);
+      expect(mime).not.toMatch(/^(Cc|Bcc):/m);
     });
   },
 );
 
 describe("MIME composition", () => {
+  it.each([
+    ["Anoop Jha", "Anoop Jha <sender@example.test>"],
+    ['Doe, "Alex"', '"Doe, \\"Alex\\"" <sender@example.test>'],
+    [null, "sender@example.test"],
+    ["   ", "sender@example.test"],
+  ])("formats sender name %j safely", async (fromName, expected) => {
+    const raw = await buildMime({
+      from: "sender@example.test",
+      fromName,
+      to: "alex@example.test",
+      subject: "Hello",
+      body: "Hi Alex",
+      messageId: "<sender-name@mailloop.in>",
+    });
+    const mime = Buffer.from(raw, "base64url").toString();
+    expect(mime.split("\r\n")).toContain(`From: ${expected}`);
+  });
+
+  it("encodes an international sender name as UTF-8", async () => {
+    const raw = await buildMime({
+      from: "sender@example.test",
+      fromName: "अनूप झा",
+      to: "alex@example.test",
+      subject: "Hello",
+      body: "Hi Alex",
+      messageId: "<international-name@mailloop.in>",
+    });
+    const mime = Buffer.from(raw, "base64url").toString();
+    expect(mime).toContain(
+      `From: =?UTF-8?B?${Buffer.from("अनूप झा").toString("base64")}?= <sender@example.test>`,
+    );
+  });
+
   it("builds one To recipient, no CC/BCC, UTF-8 content, and a PDF part", async () => {
     const raw = await buildMime({
       from: "sender@example.test",

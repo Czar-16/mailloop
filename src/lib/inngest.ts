@@ -178,10 +178,11 @@ export async function deliverOne(
   if (claim.outcome !== "claimed") return claim;
   let submitted = false;
   try {
-    const { gmail, email } = await gmailForUser(userId);
+    const { gmail, email, name } = await gmailForUser(userId);
     const attachment = send.campaign.attachment;
     const raw = await buildMime({
       from: email,
+      fromName: name,
       to: send.recipientEmail,
       subject: send.subject,
       body: send.body,
