@@ -108,6 +108,7 @@ model Send {
 }
 
 model Attachment {
+  deletedAt   DateTime?
   id          String     @id @default(uuid())
   userId      String
   fileName    String

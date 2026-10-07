@@ -10,6 +10,39 @@ export function HistoryControls({ hasQueued }: { hasQueued: boolean }) {
   const [result, setResult] = useState<ActionResult>();
   const [pending, start] = useTransition();
   const router = useRouter();
-  useEffect(() => { const interval = setInterval(() => { if (document.visibilityState === "visible") router.refresh(); }, hasQueued ? 10000 : 30000); return () => clearInterval(interval); }, [hasQueued, router]);
-  return <div className="space-y-2"><Button variant="outline" disabled={pending} onClick={() => start(async () => { try { setResult(await refreshReplies()); router.refresh(); } catch { setResult({ ok: false, message: "Could not queue a reply check. Verify Inngest is running." }); } })}><RefreshCw aria-hidden="true" />{pending ? "Queuing Check…" : "Check Replies"}</Button><Feedback result={result} /></div>;
+  useEffect(() => {
+    const interval = setInterval(
+      () => {
+        if (document.visibilityState === "visible") router.refresh();
+      },
+      hasQueued ? 10000 : 30000,
+    );
+    return () => clearInterval(interval);
+  }, [hasQueued, router]);
+  return (
+    <div className="space-y-2">
+      <Button
+        variant="outline"
+        disabled={pending}
+        onClick={() =>
+          start(async () => {
+            try {
+              setResult(await refreshReplies());
+              router.refresh();
+            } catch {
+              setResult({
+                ok: false,
+                message:
+                  "Could not queue a reply check. Verify Inngest is running.",
+              });
+            }
+          })
+        }
+      >
+        <RefreshCw aria-hidden="true" />
+        {pending ? "Queuing Check…" : "Check Replies"}
+      </Button>
+      <Feedback result={result} />
+    </div>
+  );
 }

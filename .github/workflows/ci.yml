@@ -1,0 +1,41 @@
+name: Verify Mailloop
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: mailloop
+          POSTGRES_PASSWORD: mailloop
+          POSTGRES_DB: mailloop
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U mailloop -d mailloop"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://mailloop:mailloop@localhost:5433/mailloop
+      AUTH_URL: http://localhost:3000
+      AUTH_SECRET: ci-only-session-secret-do-not-use-in-production
+      TOKEN_ENCRYPTION_KEY: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      GOOGLE_CLIENT_ID: ci-only
+      GOOGLE_CLIENT_SECRET: ci-only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run db:deploy
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run test:db
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - run: npm run build

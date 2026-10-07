@@ -5,14 +5,33 @@ import { cn } from "@/lib/utils";
 
 export const buttonVariants = cva(
   "inline-flex min-h-11 items-center justify-center gap-2 whitespace-nowrap rounded-sm px-4 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0",
-  { variants: { variant: {
-    default: "bg-primary text-primary-foreground hover:bg-body",
-    outline: "border border-border bg-card text-foreground hover:bg-muted",
-    ghost: "text-body hover:bg-muted hover:text-foreground",
-    destructive: "bg-destructive text-white hover:bg-error-deep",
-  }, size: { default: "h-11", sm: "h-11 px-3", icon: "size-11 p-0" } }, defaultVariants: { variant: "default", size: "default" } },
+  {
+    variants: {
+      variant: {
+        default: "bg-primary text-primary-foreground hover:bg-body",
+        outline: "border border-border bg-card text-foreground hover:bg-muted",
+        ghost: "text-body hover:bg-muted hover:text-foreground",
+        destructive: "bg-destructive text-white hover:bg-error-deep",
+      },
+      size: { default: "h-11", sm: "h-11 px-3", icon: "size-11 p-0" },
+    },
+    defaultVariants: { variant: "default", size: "default" },
+  },
 );
-export function Button({ className, variant, size, asChild = false, ...props }: React.ComponentProps<"button"> & VariantProps<typeof buttonVariants> & { asChild?: boolean }) {
+export function Button({
+  className,
+  variant,
+  size,
+  asChild = false,
+  ...props
+}: React.ComponentProps<"button"> &
+  VariantProps<typeof buttonVariants> & { asChild?: boolean }) {
   const Comp = asChild ? Slot : "button";
-  return <Comp data-slot="button" className={cn(buttonVariants({ variant, size, className }))} {...props} />;
+  return (
+    <Comp
+      data-slot="button"
+      className={cn(buttonVariants({ variant, size, className }))}
+      {...props}
+    />
+  );
 }

@@ -20,7 +20,16 @@ export function useUnsavedChanges(dirty: boolean, preserveQuery = false) {
       e.preventDefault();
     };
     const click = (e: MouseEvent) => {
+      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)
+        return;
       const link = (e.target as Element).closest("a");
+      if (link?.target === "_blank" || link?.hasAttribute("download")) return;
+      if (
+        link &&
+        preserveQuery &&
+        new URL(link.href).pathname === window.location.pathname
+      )
+        return;
       if (
         link &&
         link.href !== window.location.href &&
@@ -48,6 +57,13 @@ export function Feedback({ result }: { result?: ActionResult }) {
       {result?.message}
     </p>
   );
+}
+function FieldError({ result, name }: { result?: ActionResult; name: string }) {
+  return result?.fieldErrors?.[name] ? (
+    <p id={`error-${name}`} className="mt-2 text-xs text-error-deep">
+      {result.fieldErrors[name]}
+    </p>
+  ) : null;
 }
 export function DeleteButton({
   id,
@@ -111,20 +127,31 @@ export function TemplateForm({
   const [dirty, setDirty] = useState(false);
   useUnsavedChanges(dirty);
   const router = useRouter();
+  const formRef = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    if (!pending && result?.ok === false)
+      formRef.current
+        ?.querySelector<HTMLElement>("[aria-invalid='true']")
+        ?.focus();
+  }, [result, pending]);
   return (
     <form
+      ref={formRef}
       className="panel space-y-5 p-6"
       onChange={() => setDirty(true)}
-      action={(form) =>
+      onSubmit={(event) => {
+        event.preventDefault();
+        const form = new FormData(event.currentTarget);
         start(async () => {
           const r = await saveTemplate(form);
           setResult(r);
           if (r.ok) {
             setDirty(false);
+            if (!template) formRef.current?.reset();
             router.refresh();
           }
-        })
-      }
+        });
+      }}
     >
       <h2 className="text-xl font-semibold tracking-tight">
         {template ? "Edit Template" : "New Template"}
@@ -139,6 +166,11 @@ export function TemplateForm({
         </label>
         <Input
           id="template-name"
+          disabled={pending}
+          aria-invalid={!!result?.fieldErrors?.name}
+          aria-describedby={
+            result?.fieldErrors?.name ? "error-name" : undefined
+          }
           name="name"
           defaultValue={template?.name}
           required
@@ -146,6 +178,7 @@ export function TemplateForm({
           autoComplete="off"
           placeholder="A first introduction…"
         />
+        <FieldError result={result} name="name" />
       </div>
       <div>
         <label
@@ -156,6 +189,11 @@ export function TemplateForm({
         </label>
         <Input
           id="template-subject"
+          disabled={pending}
+          aria-invalid={!!result?.fieldErrors?.subject}
+          aria-describedby={
+            result?.fieldErrors?.subject ? "error-subject" : undefined
+          }
           name="subject"
           defaultValue={template?.subject}
           required
@@ -163,6 +201,7 @@ export function TemplateForm({
           autoComplete="off"
           placeholder="Exploring {{role}} opportunities at {{company}}…"
         />
+        <FieldError result={result} name="subject" />
       </div>
       <div>
         <label
@@ -173,6 +212,11 @@ export function TemplateForm({
         </label>
         <Textarea
           id="template-body"
+          disabled={pending}
+          aria-invalid={!!result?.fieldErrors?.body}
+          aria-describedby={
+            result?.fieldErrors?.body ? "error-body" : undefined
+          }
           name="body"
           defaultValue={template?.body}
           rows={10}
@@ -181,6 +225,7 @@ export function TemplateForm({
           autoComplete="off"
           placeholder="Hi {{name}},…"
         />
+        <FieldError result={result} name="body" />
         <p className="mt-2 text-xs leading-5 text-body">
           Personalize with <code>{"{{name}}"}</code>,{" "}
           <code>{"{{company}}"}</code>, and <code>{"{{role}}"}</code>. Messages
@@ -218,20 +263,31 @@ export function ContactForm({
   const [dirty, setDirty] = useState(false);
   useUnsavedChanges(dirty);
   const router = useRouter();
+  const formRef = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    if (!pending && result?.ok === false)
+      formRef.current
+        ?.querySelector<HTMLElement>("[aria-invalid='true']")
+        ?.focus();
+  }, [result, pending]);
   return (
     <form
+      ref={formRef}
       className="panel space-y-4 p-6"
       onChange={() => setDirty(true)}
-      action={(form) =>
+      onSubmit={(event) => {
+        event.preventDefault();
+        const form = new FormData(event.currentTarget);
         start(async () => {
           const r = await saveContact(form);
           setResult(r);
           if (r.ok) {
             setDirty(false);
+            if (!contact) formRef.current?.reset();
             router.refresh();
           }
-        })
-      }
+        });
+      }}
     >
       <h2 className="text-xl font-semibold">
         {contact ? "Edit Contact" : "New Contact"}
@@ -267,6 +323,11 @@ export function ContactForm({
           </label>
           <Input
             id={`contact-${f.name}`}
+            disabled={pending}
+            aria-invalid={!!result?.fieldErrors?.[f.name]}
+            aria-describedby={
+              result?.fieldErrors?.[f.name] ? `error-${f.name}` : undefined
+            }
             name={f.name}
             type={f.name === "email" ? "email" : "text"}
             defaultValue={contact?.[f.name] ?? ""}
@@ -276,6 +337,7 @@ export function ContactForm({
             spellCheck={f.name !== "email"}
             placeholder={f.placeholder}
           />
+          <FieldError result={result} name={f.name} />
         </div>
       ))}
       <div>
@@ -287,6 +349,7 @@ export function ContactForm({
         </label>
         <Textarea
           id="contact-notes"
+          disabled={pending}
           name="notes"
           defaultValue={contact?.notes ?? ""}
           maxLength={2000}

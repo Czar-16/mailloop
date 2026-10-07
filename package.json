@@ -13,8 +13,10 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
-    "inngest:dev": "npx inngest-cli@latest dev -u http://localhost:3000/api/inngest",
-    "postinstall": "prisma generate"
+    "inngest:dev": "npx --yes inngest-cli@latest dev -u http://localhost:3000/api/inngest",
+    "postinstall": "prisma generate",
+    "test:db": "MAILLOOP_DB_TESTS=1 vitest run tests/*.db.test.ts",
+    "format": "prettier --write src tests *.config.ts *.config.mts README.md"
   },
   "dependencies": {
     "@prisma/adapter-pg": "7.10.0",
@@ -39,6 +41,7 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
     "@playwright/test": "1.63.0",
     "@tailwindcss/turbopack": "^4",
     "@types/node": "22.20.5",
@@ -49,7 +52,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.4.0",
-    "prettier": "^3.9.9",
+    "prettier": "3.9.9",
     "prisma": "7.10.0",
     "tailwindcss": "^4",
     "tsx": "4.23.15",
