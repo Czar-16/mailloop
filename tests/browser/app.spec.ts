@@ -540,13 +540,11 @@ test("attachment defaults, example replacement warning, and batch role filters",
     ["SDE Intern", "Frontend Developer"],
   ]);
   await page.goto("/settings");
-  await page
-    .getByLabel("Choose PDF", { exact: true })
-    .setInputFiles({
-      name: "resume.pdf",
-      mimeType: "application/pdf",
-      buffer: Buffer.from("%PDF-1.4\n%%EOF"),
-    });
+  await page.getByLabel("Choose PDF", { exact: true }).setInputFiles({
+    name: "resume.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4\n%%EOF"),
+  });
   await page.getByRole("button", { name: "Save Resume", exact: true }).click();
   await expect(
     page.getByRole("link", { name: "resume.pdf", exact: true }),
@@ -623,3 +621,36 @@ test("attachment defaults, example replacement warning, and batch role filters",
   await page.emulateMedia({ colorScheme: "dark" });
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 });
+
+base(
+  "deleted-account session cookies return to sign-in without a redirect loop",
+  async ({ page, context }) => {
+    const salt = "authjs.session-token";
+    const deletedUserId = randomUUID();
+    const token = await encode({
+      secret: process.env.AUTH_SECRET!,
+      salt,
+      token: { userId: deletedUserId, sub: deletedUserId },
+    });
+    await context.addCookies([
+      {
+        name: salt,
+        value: token,
+        domain: "localhost",
+        path: "/",
+        httpOnly: true,
+        sameSite: "Lax",
+      },
+    ]);
+    for (const pathname of ["/", "/compose", "/contacts", "/settings"]) {
+      await page.goto(pathname);
+      await expect(page).toHaveURL(/\/$/);
+      await expect(
+        page.getByRole("button", {
+          name: "Get Started with Google",
+          exact: false,
+        }),
+      ).toBeVisible();
+    }
+  },
+);

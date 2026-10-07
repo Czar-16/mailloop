@@ -2,6 +2,7 @@ import { ThemeControl } from "@/components/theme";
 import Link from "next/link";
 import { ArrowRight, Files, Users, Send, Paperclip, Check } from "lucide-react";
 import { auth, signIn } from "@/auth";
+import { db } from "@/lib/db";
 import { redirect } from "next/navigation";
 import { Wordmark } from "@/components/common";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,13 @@ export default async function Home({
   searchParams: Promise<{ error?: string }>;
 }) {
   const session = await auth();
-  if (session?.user.id) redirect("/compose");
+  if (session?.user?.id) {
+    const user = await db.user.findUnique({
+      where: { id: session.user.id },
+      select: { id: true },
+    });
+    if (user) redirect("/compose");
+  }
   const { error } = await searchParams;
   const googleSignIn = async () => {
     "use server";
