@@ -192,7 +192,7 @@ export function Compose({
             </Button>
           </div>
         </section>
-        <section className="panel p-5">
+        <section className="panel recipient-panel p-5">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <p className="eyebrow">02 / Your shortlist</p>
             <p aria-live="polite" className="text-xs tabular-nums text-body">
@@ -253,7 +253,7 @@ export function Compose({
               Up to 15 eligible contacts in this filter
             </span>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-4">
             {!filteredContacts.length && (
               <p className="py-6 text-sm text-body">
                 No matching contacts.{" "}
@@ -266,12 +266,9 @@ export function Compose({
             {filteredContacts.map((c) => {
               const checked = selected.some((s) => s.id === c.id);
               return (
-                <div
-                  key={c.id}
-                  className="rounded-[14px] border border-border bg-surface p-3"
-                >
+                <div key={c.id} className="recipient-card">
                   <label
-                    className={`flex min-h-11 items-center gap-3 ${c.blocked ? "opacity-60" : "cursor-pointer"}`}
+                    className={`recipient-header flex min-h-11 items-center gap-3 ${c.blocked ? "opacity-60" : "cursor-pointer"}`}
                   >
                     <input
                       type="checkbox"
@@ -284,32 +281,41 @@ export function Compose({
                       }
                     />
                     <span className="min-w-0 flex-1">
-                      <span className="block break-words text-sm font-medium">
+                      <span className="block break-words text-[17px] font-semibold">
                         {c.name}{" "}
-                        <span className="font-normal text-body">
-                          {c.company && `· ${c.company}`}
-                        </span>
-                      </span>
-                      <span className="block break-all text-xs text-body">
-                        {c.email}
+                        {c.company?.trim() && (
+                          <span className="recipient-company font-normal">
+                            · {c.company}
+                          </span>
+                        )}
                       </span>
                     </span>
                   </label>
-                  <p className="ml-7 text-xs text-body">
-                    {getRole(c) || "Choose a job role before sending"}
-                  </p>
-                  {c.lastSent && (
-                    <p className="ml-7 text-xs text-body">
-                      Last Sent: <DateTime value={c.lastSent} />
-                    </p>
-                  )}
+                  <dl className="recipient-details">
+                    <dt>Email</dt>
+                    <dd>{c.email}</dd>
+                    {getRole(c).trim() && (
+                      <>
+                        <dt>Role</dt>
+                        <dd>{getRole(c)}</dd>
+                      </>
+                    )}
+                    {c.lastSent && (
+                      <>
+                        <dt>Last sent</dt>
+                        <dd>
+                          <DateTime value={c.lastSent} />
+                        </dd>
+                      </>
+                    )}
+                  </dl>
                   {c.blocked && (
-                    <p className="ml-7 text-xs text-warning">
+                    <p className="recipient-blocked text-xs">
                       Already queued or awaiting delivery confirmation
                     </p>
                   )}
                   {c.previouslySent && !c.blocked && (
-                    <p className="status-pill status-queued ml-7 mt-2">
+                    <p className="status-pill recipient-warning">
                       Previously contacted · skipped by default
                     </p>
                   )}
@@ -332,6 +338,7 @@ export function Compose({
               <label key={c.id} className="block text-sm">
                 Job Role for {c.name}
                 <Input
+                  className="mt-2"
                   name={`role-${c.id}`}
                   value={getRole(c)}
                   maxLength={160}
@@ -487,7 +494,7 @@ export function Compose({
             </p>
           </div>
         </section>
-        <section className="panel space-y-4 p-5">
+        <section className="panel send-queue-panel space-y-4 p-5">
           <h2 className="section-label">Send queue</h2>
           <ProgressRing
             sent={0}
@@ -518,10 +525,10 @@ export function Compose({
                 aria-valuemax={max}
                 aria-valuenow={Math.min(value, max)}
                 aria-valuetext={`${value} / ${max}`}
-                className="h-2 overflow-hidden rounded-full bg-surface"
+                className="recipient-meter-track h-2 overflow-hidden rounded-full"
               >
                 <div
-                  className="queue-meter h-full rounded-full"
+                  className="queue-meter recipient-meter-fill h-full rounded-full"
                   style={{
                     width: `${Math.min(100, Math.max(0, (value / max) * 100))}%`,
                   }}
@@ -545,7 +552,7 @@ export function Compose({
           <Feedback result={result} />
           <Button
             className="w-full"
-            disabled={pending || !connected}
+            disabled={pending || !connected || !included.length}
             onClick={() => {
               if (!template || !included.length) {
                 setResult({

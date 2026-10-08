@@ -137,7 +137,7 @@ export default function ComposePage(
   props: Parameters<typeof ComposePageContent>[0],
 ) {
   return (
-    <>
+    <div className="compose-page">
       <PageHeading
         eyebrow="A thoughtful introduction"
         title="Make your next connection."
@@ -146,6 +146,6 @@ export default function ComposePage(
       <Suspense fallback={<WorkspaceSkeleton page="compose" heading={false} />}>
         <ComposePageContent {...props} />
       </Suspense>
-    </>
+    </div>
   );
 }

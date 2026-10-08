@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { test as base, expect } from "@playwright/test";
+import { test as base, expect, type Locator } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { Pool } from "pg";
 import { randomUUID } from "node:crypto";
@@ -15,6 +15,28 @@ if (
 )
   throw new Error("Browser tests require a local database.");
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+async function expectCenterToFit(card: Locator) {
+  const center = card.locator(".batch-ring-center");
+  const overflowing = await center.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    return [...element.children].flatMap((child) => {
+      const range = document.createRange();
+      range.selectNodeContents(child);
+      return [...range.getClientRects()]
+        .filter(
+          (rect) => rect.left < box.left - 0.5 || rect.right > box.right + 0.5,
+        )
+        .map((rect) => ({
+          text: child.textContent,
+          left: rect.left,
+          right: rect.right,
+          centerLeft: box.left,
+          centerRight: box.right,
+        }));
+    });
+  });
+  expect(overflowing).toEqual([]);
+}
 const test = base.extend<{ userId: string }>({
   userId: async ({ context }, runFixture) => {
     const id = randomUUID();
@@ -100,6 +122,12 @@ test("workspace pages are accessible and fit the viewport", async ({
         element.getAnimations().map((animation) => animation.finished),
       );
     });
+    // Check steady-state contrast after the deliberately translucent entrance.
+    await page.locator(".help-cloud-entrance").evaluate(async (element) => {
+      await Promise.all(
+        element.getAnimations().map((animation) => animation.finished),
+      );
+    });
     const result = await new AxeBuilder({ page }).analyze();
     expect(
       result.violations,
@@ -139,7 +167,7 @@ test("workspace tab entry motion preserves same-page updates and respects reduce
       const style = getComputedStyle(element);
       return [style.animationName, style.animationDuration];
     }),
-  ).toEqual(["page-enter", "0.3s"]);
+  ).toEqual(["page-enter", "0.35s"]);
 
   const nameInput = page.getByLabel("Template name", { exact: true });
   for (const [theme, border] of [
@@ -785,7 +813,7 @@ test("example template, focused placeholder insertion, pasted lists and mixed ro
   await expect(page).toHaveURL(/history\?campaign=/);
   await expect(
     page.getByRole("region", { name: "Campaign delivery progress" }),
-  ).toContainText("Queued · 3");
+  ).toContainText(/Queued\s*3/);
   // Follow the user's route sequence before delivery finishes.
   await page.getByRole("link", { name: "Compose", exact: true }).click();
   await page.getByRole("link", { name: "History", exact: true }).click();
@@ -793,7 +821,7 @@ test("example template, focused placeholder insertion, pasted lists and mixed ro
   const progress = page.getByRole("region", {
     name: "Campaign delivery progress",
   });
-  await expect(progress).toContainText("Queued · 3");
+  await expect(progress).toContainText(/Queued\s*3/);
   await expect(progress.locator(".completion-check")).toHaveCount(0);
   const sends = await pool.query(
     'SELECT s."recipientRole",s.body,c."attachmentId" FROM "Send" s JOIN "Campaign" c ON c.id=s."campaignId" WHERE c."userId"=$1',
@@ -820,9 +848,11 @@ test("example template, focused placeholder insertion, pasted lists and mixed ro
   await expect(progress.locator(".completion-check")).toBeVisible({
     timeout: 15000,
   });
-  await expect(progress).toContainText("Batch complete. All emails sent.");
-  await expect(progress).toContainText("Sent · 3");
-  await expect(progress).toContainText("Queued · 0");
+  await expect(progress).toContainText(
+    "All messages confirmed by the service.",
+  );
+  await expect(progress).toContainText(/Sent\s*3/);
+  await expect(progress).toContainText(/Queued\s*0/);
   await expect(progress.locator(".timer-value")).toHaveCount(0);
   await page.getByRole("button", { name: "Dark theme", exact: true }).click();
   await expect(progress.locator(".completion-check")).toBeVisible();
@@ -896,15 +926,15 @@ test("progress distinguishes uncertain outcomes and includes the user queue in e
   await page.goto(`/history?campaign=${campaign}`);
   const card = page.getByRole("region", { name: "Campaign delivery progress" });
   await expect(card).toContainText("Delivery needs review");
-  await expect(card).toContainText("Approximate remaining:", {
+  await expect(card).toContainText("Remaining", {
     timeout: 15000,
   });
   await expect(card).toContainText("Retries and service delays");
   await page.clock.pauseAt(
     new Date((await page.evaluate(() => Date.now())) + 1000),
   );
-  // Let the sampled clock settle after pauseAt skips to the new timestamp.
-  await page.clock.runFor(100);
+  // Let the one-second timer settle after pauseAt skips to the new timestamp.
+  await page.clock.runFor(1000);
   const timer = card.locator(".progress-ring b");
   const readSeconds = async () => {
     const [minutes, seconds] = (await timer.innerText()).split(":").map(Number);
@@ -916,24 +946,30 @@ test("progress distinguishes uncertain outcomes and includes the user queue in e
   await timer.evaluate((element) => {
     element.setAttribute("data-timer-original", "true");
   });
-  const arc = card.locator(".countdown-arc");
+  // Ring segments reflect counts, so ticking the timer must not move them.
+  const ring = card.locator(".progress-ring");
+  const outerSegments = () =>
+    ring
+      .locator('circle[r="64"]')
+      .evaluateAll((elements) => elements.map((element) => element.outerHTML));
+  const beforeRing = await outerSegments();
+  const arc = ring.locator(".batch-countdown-arc");
   const offset = () =>
-    arc.evaluate((e) => Number(e.getAttribute("stroke-dashoffset")));
-  // The ring moves between digit changes, rather than stepping once a second.
-  const firstOffset = await offset();
-  await page.clock.runFor(250);
-  expect(await offset()).toBeGreaterThan(firstOffset);
-  await page.clock.runFor(750);
+    arc.evaluate((element) =>
+      Number(element.getAttribute("stroke-dashoffset")),
+    );
+  const beforeOffset = await offset();
+  await expectCenterToFit(card);
+  // The arc changes between one-second label ticks.
+  await page.clock.runFor(100);
+  expect(await offset()).toBeGreaterThan(beforeOffset);
+  await page.clock.runFor(900);
   expect(await readSeconds()).toBe(before - 1);
   await page.clock.runFor(1000);
   expect(await readSeconds()).toBe(before - 2);
   await expect(timer).toHaveAttribute("data-timer-original", "true");
-  await expect(card.locator(".countdown-arc")).toHaveCSS(
-    "transition-duration",
-    "0s",
-  );
+  expect(await outerSegments()).toEqual(beforeRing);
   await expect(card.locator(".completion-check")).toHaveCount(0);
-  const beforeHidden = await offset();
   await page.evaluate(() => {
     Object.defineProperty(document, "visibilityState", {
       configurable: true,
@@ -941,8 +977,10 @@ test("progress distinguishes uncertain outcomes and includes the user queue in e
     });
     document.dispatchEvent(new Event("visibilitychange"));
   });
+  const hiddenOffset = await offset();
   await page.clock.runFor(2000);
-  expect(await offset()).toBe(beforeHidden);
+  expect(await offset()).toBe(hiddenOffset);
+  expect(await readSeconds()).toBe(before - 2);
   await page.evaluate(() => {
     Object.defineProperty(document, "visibilityState", {
       configurable: true,
@@ -950,8 +988,8 @@ test("progress distinguishes uncertain outcomes and includes the user queue in e
     });
     document.dispatchEvent(new Event("visibilitychange"));
   });
-  await expect.poll(offset).toBeGreaterThan(beforeHidden);
-  expect(await readSeconds()).toBe(before - 4);
+  await expect.poll(readSeconds).toBe(before - 4);
+  expect(await offset()).toBeGreaterThan(hiddenOffset);
   await page.clock.resume();
   await page.getByRole("button", { name: "Dark theme", exact: true }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -969,6 +1007,22 @@ test("progress distinguishes uncertain outcomes and includes the user queue in e
   });
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.emulateMedia({ reducedMotion: "reduce" });
+  // Let the media-query change handler settle before freezing the clock.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
+  await page.clock.pauseAt(
+    new Date((await page.evaluate(() => Date.now())) + 1000),
+  );
+  const reducedOffset = await offset();
+  await page.clock.runFor(100);
+  expect(await offset()).toBe(reducedOffset);
+  await page.clock.runFor(1000);
+  expect(await offset()).toBeGreaterThan(reducedOffset);
+  await page.clock.resume();
   expect(
     await card
       .locator(".progress-ring circle")
@@ -977,17 +1031,17 @@ test("progress distinguishes uncertain outcomes and includes the user queue in e
   ).toBe("0s");
   // An absent/unknown campaign parameter must not conceal the user's queue.
   await page.goto(`/history?campaign=${randomUUID()}`);
-  await expect(card).toContainText("Queued · 2");
-  await expect(card).toContainText("Sent · 1");
-  await expect(card).toContainText("Failed · 1");
-  await expect(card).toContainText("Needs review · 1");
+  await expect(card).toContainText(/Queued\s*2/);
+  await expect(card).toContainText(/Sent\s*1/);
+  await expect(card).toContainText(/Failed\s*1/);
+  await expect(card).toContainText("Delivery needs review · 1");
   await page.getByRole("link", { name: "Compose", exact: true }).click();
   await page.getByRole("link", { name: "History", exact: true }).click();
   await expect(page).toHaveURL(/\/history$/);
-  await expect(card).toContainText("Queued · 2");
-  await expect(card.locator(".countdown-arc")).toBeVisible();
+  await expect(card).toContainText(/Queued\s*2/);
+  await expect(card.locator(".timer-value")).toBeVisible();
   await page.reload();
-  await expect(card).toContainText("Queued · 2");
+  await expect(card).toContainText(/Queued\s*2/);
 
   const search = page.getByRole("searchbox", { name: "Search history" });
   const statusFilter = page.getByLabel("Filter by status");
@@ -995,7 +1049,7 @@ test("progress distinguishes uncertain outcomes and includes the user queue in e
   await statusFilter.selectOption("QUEUED");
   await expect(page).toHaveURL(/q=alex&status=QUEUED/);
   await expect(page.locator("tbody tr")).toHaveCount(2);
-  await expect(card).toContainText("Sent · 1");
+  await expect(card).toContainText(/Sent\s*1/);
   await expect(
     page.getByRole("button", { name: "Filter", exact: true }),
   ).toHaveCount(0);
@@ -1006,17 +1060,31 @@ test("progress distinguishes uncertain outcomes and includes the user queue in e
   await search.press("Enter");
   await expect(page).toHaveURL(/q=no-match&status=SENT/);
   await expect(page.locator("tbody tr")).toHaveCount(0);
-  await expect(card).toContainText("Queued · 2");
+  await expect(card).toContainText(/Queued\s*2/);
 
   // Finishing one campaign must not remove its counts from the observed queue.
   await pool.query(
     `UPDATE "Send" SET status='SENT',"deliveryState"='DONE',"sentAt"=now() WHERE "campaignId"=$1`,
     [otherCampaign],
   );
-  await expect(card).toContainText("Queued · 1", { timeout: 15000 });
-  await expect(card).toContainText("Sent · 2");
+  await expect(card).toContainText(/Queued\s*1/, { timeout: 15000 });
+  await expect(card).toContainText(/Sent\s*2/);
   await expect(card).toContainText("Delivery needs review");
   await expect(card.locator(".completion-check")).toHaveCount(0);
+
+  // Uncertain outcomes remain active after the last queued send finishes.
+  await pool.query(
+    `UPDATE "Send" SET status='SENT',"deliveryState"='DONE',"sentAt"=now() WHERE "campaignId"=$1 AND status='QUEUED'`,
+    [campaign],
+  );
+  await expect(card.locator(".timer-value")).toHaveText("Review", {
+    timeout: 15000,
+  });
+  await expect(card.getByRole("status")).toHaveText("Sending");
+  await expect(card.locator(".completion-check")).toHaveCount(0);
+
+  await expect(card.locator(".batch-countdown-track")).toHaveCount(0);
+  await expectCenterToFit(card);
 
   await pool.query(
     `UPDATE "Send" SET status='SENT',"deliveryState"='DONE',"sentAt"=now() WHERE "campaignId" IN (SELECT id FROM "Campaign" WHERE "userId"=$1)`,
@@ -1025,101 +1093,240 @@ test("progress distinguishes uncertain outcomes and includes the user queue in e
   await expect(card.locator(".completion-check")).toBeVisible({
     timeout: 15000,
   });
-  await expect(card).toContainText("Sent · 5");
+  await expect(card).toContainText(/Sent\s*5/);
   await page.reload();
   await expect(card).toHaveCount(0);
   await page.goto("/history");
   await expect(card).toHaveCount(0);
 });
 
-test("batch countdown survives polls, individual sends and an expired estimate", async ({
+test("single-recipient batches show Sending without a countdown until confirmed", async ({
   page,
   userId,
-}, testInfo) => {
+}) => {
   const template = randomUUID(),
     contact = randomUUID(),
-    campaign = randomUUID();
+    campaign = randomUUID(),
+    send = randomUUID();
   await pool.query(
-    "INSERT INTO \"Template\" (id,\"userId\",name,subject,body) VALUES ($1,$2,'Timer','Hi','Hello')",
+    "INSERT INTO \"Template\" (id,\"userId\",name,subject,body) VALUES ($1,$2,'Single timer','Hi','Hello')",
     [template, userId],
   );
   await pool.query(
-    "INSERT INTO \"Contact\" (id,\"userId\",name,email) VALUES ($1,$2,'Alex','timer@example.test')",
+    "INSERT INTO \"Contact\" (id,\"userId\",name,email) VALUES ($1,$2,'Alex','single-timer@example.test')",
     [contact, userId],
   );
   await pool.query(
-    'INSERT INTO "Campaign" (id,"userId","templateId",status,"createdAt") VALUES ($1,$2,$3,\'QUEUED\',now() - interval \'60 seconds\')',
+    'INSERT INTO "Campaign" (id,"userId","templateId",status) VALUES ($1,$2,$3,\'QUEUED\')',
     [campaign, userId, template],
   );
-  const sendIds = [randomUUID(), randomUUID()];
-  for (const id of sendIds)
-    await pool.query(
-      'INSERT INTO "Send" (id,"campaignId","contactId",status,"deliveryState","dispatchedAt") VALUES ($1,$2,$3,\'QUEUED\',\'READY\',now())',
-      [id, campaign, contact],
-    );
+  await pool.query(
+    'INSERT INTO "Send" (id,"campaignId","contactId",status,"deliveryState","dispatchedAt") VALUES ($1,$2,$3,\'QUEUED\',\'READY\',now())',
+    [send, campaign, contact],
+  );
+  await pool.query('UPDATE "User" SET "nextSendAt"=$2::timestamp WHERE id=$1', [
+    userId,
+    new Date(Date.now() + 60000).toISOString(),
+  ]);
   await page.goto(`/history?campaign=${campaign}`);
   const card = page.getByRole("region", { name: "Campaign delivery progress" });
-  const arc = card.locator(".countdown-arc");
-  const offset = () =>
-    arc.evaluate((e) => Number(e.getAttribute("stroke-dashoffset")));
-  await expect.poll(offset).toBeGreaterThan(100);
-  await card.screenshot({ path: testInfo.outputPath("batch-active.png") });
-  const initial = await offset();
-  // An unchanged server poll must not replenish the countdown.
-  await page.waitForTimeout(5500);
-  expect(await offset()).toBeGreaterThan(initial);
+  const timer = card.locator(".timer-value");
+  await expect(timer).toHaveText("Sending");
+  await expect(card.locator(".batch-countdown-track")).toHaveCount(0);
+  await expectCenterToFit(card);
+  await expect(card).not.toContainText("EST. LEFT");
+  await expect(card).not.toContainText("Remaining");
   await pool.query(
-    'UPDATE "Send" SET status=\'SENT\',"deliveryState"=\'DONE\',"sentAt"=now() WHERE id=$1',
-    [sendIds[0]],
+    'UPDATE "Send" SET "deliveryState"=\'ATTEMPTING\', "attemptedAt"=now() WHERE id=$1',
+    [send],
   );
-  await expect(card).toContainText("Queued · 1", { timeout: 15000 });
-  // Updating the queue must retain elapsed batch time in the arc denominator.
-  await expect.poll(offset).toBeGreaterThan(150);
-  await expect(card.locator(".completion-check")).toHaveCount(0);
-  const timerSeconds = () =>
-    card.locator(".timer-value").evaluate((element) => {
-      const [minutes, seconds] = element.textContent!.split(":").map(Number);
-      return minutes * 60 + seconds;
-    });
-  const beforeDelay = await timerSeconds();
-  await pool.query('UPDATE "User" SET "nextSendAt"=$2::timestamp WHERE id=$1', [
-    userId,
-    new Date((await page.evaluate(() => Date.now())) + 120000).toISOString(),
-  ]);
-  // The explanatory range may change, but the running timer must not increase.
-  await expect(card).toContainText("Approximate remaining: 2–3 minutes", {
-    timeout: 15000,
-  });
-  expect(await timerSeconds()).toBeLessThanOrEqual(beforeDelay);
-  expect(await offset()).toBeGreaterThan(initial);
-  await pool.query('UPDATE "User" SET "nextSendAt"=$2::timestamp WHERE id=$1', [
-    userId,
-    new Date((await page.evaluate(() => Date.now())) - 1000).toISOString(),
-  ]);
-  await expect(card.locator(".timer-value")).toHaveText("Sending", {
-    timeout: 15000,
-  });
-  await expect(card).toContainText("Please be patient");
-  await expect(card.locator(".completion-check")).toHaveCount(0);
-  await pool.query('UPDATE "User" SET "nextSendAt"=$2::timestamp WHERE id=$1', [
-    userId,
-    new Date((await page.evaluate(() => Date.now())) + 120000).toISOString(),
-  ]);
-  await expect(card).toContainText("Approximate remaining: 2–3 minutes", {
-    timeout: 15000,
-  });
-  await expect(card.locator(".timer-value")).toHaveText("Sending");
-  expect(await offset()).toBeCloseTo(2 * Math.PI * 59);
+  await expect(card).toContainText("CONFIRMING", { timeout: 15000 });
+  await expect(timer).toHaveText("Sending");
+  await expect(card).not.toContainText("Remaining");
   await pool.query(
-    'UPDATE "Send" SET status=\'FAILED\',"deliveryState"=\'DONE\',"attemptedAt"=now() WHERE id=$1',
-    [sendIds[1]],
+    'UPDATE "Send" SET status=\'SENT\', "deliveryState"=\'DONE\', "sentAt"=now() WHERE id=$1',
+    [send],
   );
-  await expect(card).toContainText("with failures", { timeout: 15000 });
-  await expect(card.locator(".completion-check")).toHaveCount(0);
-  await expect(arc).toHaveCount(0);
-  await page.reload();
-  await expect(card).toHaveCount(0);
+  await expect(card.getByRole("status")).toHaveText("Complete", {
+    timeout: 15000,
+  });
+  await expect(card.locator(".completion-check")).toBeVisible();
+  await expect(card.getByText("Done", { exact: true })).toBeVisible();
+  await expect(timer).toHaveCount(0);
 });
+
+for (const allFailed of [false, true]) {
+  test(`whole-batch countdown survives polls, individual sends and completes ${allFailed ? "all-failed" : "mixed"} batches`, async ({
+    page,
+    userId,
+  }, testInfo) => {
+    const template = randomUUID(),
+      contact = randomUUID(),
+      campaign = randomUUID();
+    await pool.query(
+      "INSERT INTO \"Template\" (id,\"userId\",name,subject,body) VALUES ($1,$2,'Timer','Hi','Hello')",
+      [template, userId],
+    );
+    await pool.query(
+      "INSERT INTO \"Contact\" (id,\"userId\",name,email) VALUES ($1,$2,'Alex','timer@example.test')",
+      [contact, userId],
+    );
+    await pool.query(
+      'INSERT INTO "Campaign" (id,"userId","templateId",status,"createdAt") VALUES ($1,$2,$3,\'QUEUED\',now() - interval \'60 seconds\')',
+      [campaign, userId, template],
+    );
+    const sendIds = [randomUUID(), randomUUID()];
+    for (const id of sendIds)
+      await pool.query(
+        'INSERT INTO "Send" (id,"campaignId","contactId",status,"deliveryState","dispatchedAt") VALUES ($1,$2,$3,\'QUEUED\',\'READY\',now())',
+        [id, campaign, contact],
+      );
+    await pool.query(
+      'UPDATE "User" SET "nextSendAt"=$2::timestamp WHERE id=$1',
+      [userId, new Date(Date.now() + 40000).toISOString()],
+    );
+    await page.goto(`/history?campaign=${campaign}`);
+    const card = page.getByRole("region", {
+      name: "Campaign delivery progress",
+    });
+    const timerSeconds = () =>
+      card.locator(".timer-value").evaluate((element) => {
+        const [minutes, seconds] = element.textContent!.split(":").map(Number);
+        return minutes * 60 + seconds;
+      });
+    await expect(card).toContainText("EST. LEFT");
+    await expect(card.getByRole("status")).toHaveText("Sending");
+    const timer = card.locator(".timer-value");
+    const initial = await timerSeconds();
+    const arc = card.locator(".batch-countdown-arc");
+    const initialOffset = Number(await arc.getAttribute("stroke-dashoffset"));
+    expect(initial).toBeGreaterThan(60);
+    expect(initial).toBeLessThanOrEqual(80);
+    // Confirm that an unchanged server poll does not replenish the deadline.
+    await page.waitForTimeout(5500);
+    expect(await timerSeconds()).toBeLessThan(initial - 3);
+    expect(Number(await arc.getAttribute("stroke-dashoffset"))).toBeGreaterThan(
+      initialOffset,
+    );
+    // A worker reservation must not replenish the existing batch estimate.
+    await pool.query(
+      'UPDATE "Send" SET "deliveryState"=\'ATTEMPTING\', "attemptedAt"=now() WHERE id=$1',
+      [sendIds[0]],
+    );
+    await pool.query(
+      'UPDATE "User" SET "nextSendAt"=$2::timestamp WHERE id=$1',
+      [userId, new Date(Date.now() + 60000).toISOString()],
+    );
+    await expect(card).toContainText("Awaiting confirmation", {
+      timeout: 15000,
+    });
+    await expect(card).toContainText("EST. LEFT");
+    expect(await timerSeconds()).toBeLessThan(initial - 3);
+    await pool.query(
+      'UPDATE "User" SET "nextSendAt"=$2::timestamp WHERE id=$1',
+      [userId, new Date(Date.now() + 40000).toISOString()],
+    );
+    await pool.query(
+      'UPDATE "Send" SET status=$2::"SendStatus", "deliveryState"=\'DONE\', "sentAt"=now(), "attemptedAt"=now() WHERE id=$1',
+      [sendIds[0], allFailed ? "FAILED" : "SENT"],
+    );
+    await expect(card).toContainText(/Queued\s*1/, { timeout: 15000 });
+    expect(await timerSeconds()).toBeGreaterThan(20);
+    await expect(card).toContainText("EST. LEFT");
+    const beforeDelay = await timerSeconds();
+    await expect(card.locator(".completion-check")).toHaveCount(0);
+    await pool.query(
+      'UPDATE "User" SET "nextSendAt"=$2::timestamp WHERE id=$1',
+      [
+        userId,
+        new Date(
+          (await page.evaluate(() => Date.now())) + 120000,
+        ).toISOString(),
+      ],
+    );
+    await expect(card).toContainText("Remaining 2–3 min", { timeout: 15000 });
+    expect(await timerSeconds()).toBeLessThanOrEqual(beforeDelay);
+    await pool.query(
+      'UPDATE "User" SET "nextSendAt"=$2::timestamp WHERE id=$1',
+      [
+        userId,
+        new Date((await page.evaluate(() => Date.now())) - 1000).toISOString(),
+      ],
+    );
+    await expect(timer).toHaveText("Sending", { timeout: 15000 });
+    await expect(card.locator(".batch-countdown-track")).toBeVisible();
+    await expect
+      .poll(async () => Number(await arc.getAttribute("stroke-dashoffset")))
+      .toBeCloseTo(2 * Math.PI * 53);
+    await expectCenterToFit(card);
+    await expect(card).not.toContainText("EST. LEFT");
+    await expect(card.getByRole("status")).toHaveText("Sending");
+    await expect(card.locator(".completion-check")).toHaveCount(0);
+    await pool.query(
+      'UPDATE "User" SET "nextSendAt"=$2::timestamp WHERE id=$1',
+      [
+        userId,
+        new Date(
+          (await page.evaluate(() => Date.now())) + 120000,
+        ).toISOString(),
+      ],
+    );
+    await expect(card).toContainText("Remaining 2–3 min", { timeout: 15000 });
+    await expect(timer).toHaveText("Sending");
+    await page.getByRole("button", { name: "Dark theme", exact: true }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await page.evaluate(async () => {
+      await Promise.all(
+        document
+          .getAnimations()
+          .filter(
+            (animation) =>
+              animation.effect?.getComputedTiming().iterations !== Infinity,
+          )
+          .map((animation) => animation.finished.catch(() => {})),
+      );
+    });
+    const ringBox = await card.locator(".progress-ring").boundingBox();
+    const tilesBox = await card.locator("dl").boundingBox();
+    expect(ringBox!.width).toBe(148);
+    expect(ringBox!.height).toBe(148);
+    if (testInfo.project.name === "mobile")
+      expect(tilesBox!.y).toBeGreaterThan(ringBox!.y + ringBox!.height);
+    else expect(tilesBox!.x).toBeGreaterThan(ringBox!.x + ringBox!.width);
+    expect(
+      await card
+        .locator("dl > div")
+        .evaluateAll(
+          (tiles) =>
+            new Set(tiles.map((tile) => tile.getBoundingClientRect().top)).size,
+        ),
+    ).toBe(1);
+    await card.screenshot({ path: testInfo.outputPath("batch-active.png") });
+    await pool.query(
+      'UPDATE "Send" SET status=\'FAILED\', "deliveryState"=\'DONE\', "attemptedAt"=now() WHERE id=$1',
+      [sendIds[1]],
+    );
+    await expect(card.getByRole("status")).toHaveText("Complete", {
+      timeout: 15000,
+    });
+    await expect(card.locator(".completion-check")).toBeVisible();
+    await expect(card).toContainText("All messages confirmed by the service.");
+    await expect(timer).toHaveCount(0);
+    await expect(arc).toHaveCount(0);
+    await expectCenterToFit(card);
+    await expect(card).toContainText(`${allFailed ? 0 : 1} of 2 sent`);
+    await expect(card.getByRole("img")).toHaveAttribute(
+      "aria-label",
+      `${allFailed ? 0 : 1} sent, 0 queued, ${allFailed ? 2 : 1} failed, 0 need review out of 2`,
+    );
+    const elapsed = await card.getByText(/^Elapsed/).innerText();
+    await page.waitForTimeout(1100);
+    await expect(card.getByText(/^Elapsed/)).toHaveText(elapsed);
+    await card.screenshot({ path: testInfo.outputPath("batch-complete.png") });
+    await page.reload();
+    await expect(card).toHaveCount(0);
+  });
+}
 
 test("compose bulk selection respects role filters, prior sends and the batch cap", async ({
   page,
@@ -1990,6 +2197,7 @@ for (const kind of ["Contact", "Template"] as const) {
       })
       .fill("Updated");
     await page.clock.install();
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
     await save.click();
     await expect(toast).toBeVisible();
     await expect(inline).toBeVisible();
@@ -2034,3 +2242,455 @@ for (const kind of ["Contact", "Template"] as const) {
     await expect(inline).toHaveCount(0);
   });
 }
+
+const tutorialPages = [
+  { route: "compose", title: "Search recipients", count: 6 },
+  { route: "templates", title: "Personalize with placeholders", count: 4 },
+  { route: "history", title: "Read your totals", count: 4 },
+  { route: "contacts", title: "Find your contacts", count: 4 },
+  { route: "settings", title: "Save role shortcuts", count: 4 },
+];
+
+for (const theme of ["light", "dark"] as const) {
+  for (const { route, title, count } of tutorialPages) {
+    test(`page help fits and is accessible: ${route} ${theme}`, async ({
+      page,
+      userId,
+    }, testInfo) => {
+      await pool.query('UPDATE "User" SET "preferredRoles"=$2 WHERE id=$1', [
+        userId,
+        ["Frontend Developer"],
+      ]);
+      await pool.query(
+        'INSERT INTO "Contact" (id,"userId",name,email,company,"jobRole") VALUES ($1,$2,$3,$4,$5,$6)',
+        [
+          randomUUID(),
+          userId,
+          "Alex",
+          "alex@example.test",
+          "Northstar",
+          "Frontend Developer",
+        ],
+      );
+      await pool.query(
+        'INSERT INTO "Template" (id,"userId",name,subject,body) VALUES ($1,$2,$3,$4,$5)',
+        [
+          randomUUID(),
+          userId,
+          "A first introduction",
+          "Exploring {{role}} opportunities",
+          "Hi {{name}},\nI would like to apply at {{company}}.\nhttps://example.com/portfolio",
+        ],
+      );
+      await page.addInitScript(
+        (value) => localStorage.setItem("mailloop-theme", value),
+        theme,
+      );
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await page.goto(`/${route}`);
+      await expect(page.locator("main h1")).toBeVisible();
+      await expect(
+        page.locator('[role="status"][aria-busy="true"]'),
+      ).toHaveCount(0);
+      const help = page.getByRole("button", {
+        name: `Help with ${route}`,
+        exact: true,
+      });
+      await expect(help).toHaveCount(1);
+      const bounds = await help.boundingBox();
+      expect(bounds!.width).toBe(44);
+      expect(bounds!.height).toBe(44);
+      const badge = page.getByRole("button", {
+        name: "Hide help button until reload.",
+        exact: true,
+      });
+      const wrapper = page.locator(".help-launcher");
+      await expect(wrapper).toHaveAttribute("data-state", "visible");
+      const wrapperBox = (await wrapper.boundingBox())!;
+      const badgeBox = (await badge.boundingBox())!;
+      expect(wrapperBox.width).toBe(44);
+      expect(wrapperBox.height).toBe(44);
+      expect(badgeBox.width).toBe(20);
+      expect(badgeBox.height).toBe(20);
+      expect(badgeBox.x).toBe(wrapperBox.x - 6);
+      expect(badgeBox.y).toBe(wrapperBox.y - 6);
+      expect(
+        await badge.evaluate((element) => element.parentElement?.className),
+      ).toBe("help-launcher");
+      const iconBox = (await badge.locator("svg").boundingBox())!;
+      expect(iconBox.width).toBe(10);
+      expect(iconBox.height).toBe(10);
+      expect(iconBox.x + 5).toBe(badgeBox.x + 10);
+      expect(iconBox.y + 5).toBe(badgeBox.y + 10);
+      await expect(badge.locator("svg line")).toHaveCount(2);
+      const clearance = await page
+        .locator(".help-cloud")
+        .evaluate((element) => {
+          const cloud = element.getBoundingClientRect();
+          const badge = document
+            .querySelector(".help-dismiss")!
+            .getBoundingClientRect();
+          return [null, "::before", "::after"].every((pseudo) => {
+            if (!pseudo)
+              return (
+                cloud.bottom < badge.top ||
+                cloud.left > badge.right ||
+                cloud.right < badge.left
+              );
+            const style = getComputedStyle(element, pseudo);
+            const right = cloud.right - parseFloat(style.right);
+            const bottom = cloud.bottom - parseFloat(style.bottom);
+            return (
+              bottom < badge.top ||
+              right < badge.left ||
+              right - parseFloat(style.width) > badge.right
+            );
+          });
+        });
+      expect(clearance).toBe(true);
+      await help.focus();
+      await page.keyboard.press("Tab");
+      await expect(badge).toBeFocused();
+      await expect(badge).toHaveCSS("outline-style", "solid");
+      await expect(badge).toHaveCSS("outline-width", "2px");
+      await expect(badge).toHaveCSS(
+        "transform",
+        "matrix(1.1, 0, 0, 1.1, 0, 0)",
+      );
+      await badge.blur();
+      const cloud = page.locator(".help-cloud");
+      const cloudBox = await cloud.boundingBox();
+      expect(cloudBox!.x).toBeGreaterThanOrEqual(0);
+      expect(cloudBox!.y).toBeGreaterThanOrEqual(0);
+      expect(cloudBox!.x + cloudBox!.width).toBeLessThanOrEqual(
+        page.viewportSize()!.width,
+      );
+      expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+      await page.screenshot({
+        path: testInfo.outputPath("closed.png"),
+        fullPage: true,
+      });
+      await help.click();
+      const dialog = page.getByRole("dialog");
+      await expect(dialog.getByRole("heading", { name: title })).toBeVisible();
+      await expect(
+        dialog.getByRole("button", { name: "Next", exact: true }),
+      ).toBeFocused();
+      await expect(
+        dialog.getByRole("button", { name: "Back", exact: true }),
+      ).toBeDisabled();
+      await expect(page.locator(".help-launcher")).toBeHidden();
+      await expect(page.locator(".help-dismiss")).toHaveCount(0);
+      for (let step = 1; step <= count; step++) {
+        await expect(dialog.locator(".tutorial-counter")).toHaveText(
+          `${step} / ${count}`,
+        );
+        await expect(dialog.locator(".tutorial-step")).toBeVisible();
+        expect((await new AxeBuilder({ page }).analyze()).violations).toEqual(
+          [],
+        );
+        const fits = await dialog.evaluate((element) => {
+          const card = element
+            .querySelector(".tutorial-card")!
+            .getBoundingClientRect();
+          const content = element
+            .querySelector(".tutorial-step")!
+            .getBoundingClientRect();
+          const arrows = [...element.querySelectorAll(".tutorial-arrow")];
+          return (
+            card.left >= 0 &&
+            card.right <= innerWidth &&
+            arrows.every((arrow) => {
+              const rect = arrow.getBoundingClientRect();
+              return (
+                rect.left >= card.left &&
+                rect.right <= card.right &&
+                rect.top >= card.top &&
+                rect.bottom <= card.bottom &&
+                (rect.right <= content.left || rect.left >= content.right)
+              );
+            }) &&
+            element.scrollWidth <= innerWidth
+          );
+        });
+        expect(fits).toBe(true);
+        await page.screenshot({
+          path: testInfo.outputPath(`open-${step}.png`),
+        });
+        if (step < count) await page.keyboard.press("ArrowRight");
+      }
+      await expect(
+        dialog.getByRole("button", { name: "Next", exact: true }),
+      ).toHaveCount(0);
+      await expect(
+        dialog.getByRole("button", { name: "Done", exact: true }),
+      ).toBeFocused();
+      for (let i = 0; i < 6; i++) {
+        await page.keyboard.press("Tab");
+        expect(
+          await dialog.evaluate((element) =>
+            element.contains(document.activeElement),
+          ),
+        ).toBe(true);
+      }
+      await page.keyboard.press("Shift+Tab");
+      expect(
+        await dialog.evaluate((element) =>
+          element.contains(document.activeElement),
+        ),
+      ).toBe(true);
+      await dialog.getByRole("button", { name: "Done", exact: true }).click();
+      await expect(dialog).toHaveCount(0);
+      await expect(help).toBeFocused();
+      await help.click();
+      await expect(dialog.locator(".tutorial-counter")).toHaveText(
+        `1 / ${count}`,
+      );
+      await page.keyboard.press("Escape");
+      await expect(dialog).toHaveCount(0);
+      await expect(help).toBeFocused();
+      await help.click();
+      await dialog.click({ position: { x: 2, y: 2 } });
+      await expect(dialog).toHaveCount(0);
+      await expect(help).toBeFocused();
+      await expect(wrapper).toBeVisible();
+      await expect(badge).toBeVisible();
+      await badge.focus();
+      await page.keyboard.down("Space");
+      await expect(badge).toHaveCSS(
+        "transform",
+        "matrix(0.9, 0, 0, 0.9, 0, 0)",
+      );
+      await page.keyboard.up("Space");
+      await expect(wrapper).toHaveCount(0);
+      await expect(page.locator("#main-content")).toBeFocused();
+      for (const destination of tutorialPages) {
+        await page
+          .getByRole("navigation", { name: "Main navigation" })
+          .getByRole("link", {
+            name: new RegExp(`^${destination.route}$`, "i"),
+          })
+          .click();
+        await expect(page).toHaveURL(new RegExp(`/${destination.route}$`));
+        await expect(wrapper).toHaveCount(0);
+      }
+      await page.reload();
+      await expect(wrapper).toBeVisible();
+      await expect(badge).toBeVisible();
+    });
+  }
+}
+
+test("page help transitions, dismissal, route changes, and narrow screens", async ({
+  page,
+  userId,
+}) => {
+  await pool.query('UPDATE "User" SET "preferredRoles"=$2 WHERE id=$1', [
+    userId,
+    ["Frontend Developer"],
+  ]);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("/compose");
+  const help = page.getByRole("button", {
+    name: "Help with compose",
+    exact: true,
+  });
+  await help.click();
+  const dialog = page.getByRole("dialog");
+  await expect(
+    dialog.getByRole("button", { name: "Next", exact: true }),
+  ).toBeFocused();
+  // Dispatch repeated events in one frame to exercise the navigation lock.
+  await dialog
+    .getByRole("button", { name: "Next", exact: true })
+    .evaluate((button) => {
+      (button as HTMLButtonElement).click();
+      (button as HTMLButtonElement).click();
+    });
+  await expect(dialog.locator(".tutorial-counter")).toHaveText("2 / 6");
+  await expect(dialog).toHaveAttribute("data-phase", "idle");
+  await page.keyboard.press("ArrowLeft");
+  await expect(dialog.locator(".tutorial-counter")).toHaveText("1 / 6");
+  await expect(dialog).toHaveAttribute("data-phase", "idle");
+  await page.keyboard.press("ArrowRight");
+  await dialog.getByRole("button", { name: "Close tutorial" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(help).toBeFocused();
+  await help.click();
+  await expect(dialog.locator(".tutorial-counter")).toHaveText("1 / 6");
+  // Browser history can navigate even while the page itself is inert.
+  await page.evaluate(() => history.pushState(null, "", "/settings"));
+  await expect(dialog).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Help with settings" }),
+  ).toBeVisible();
+  await page.goBack();
+  await expect(help).toBeVisible();
+  await expect(dialog).toHaveCount(0);
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  for (const { route, count } of tutorialPages) {
+    await page.goto(`/${route}`);
+    await page
+      .getByRole("button", { name: `Help with ${route}`, exact: true })
+      .click();
+    for (let step = 1; step <= count; step++) {
+      await expect(dialog.locator(".tutorial-counter")).toHaveText(
+        `${step} / ${count}`,
+      );
+      const card = await dialog.locator(".tutorial-card").boundingBox();
+      expect(card!.x).toBeGreaterThanOrEqual(16);
+      expect(card!.x + card!.width).toBeLessThanOrEqual(304);
+      await expect(
+        dialog.getByRole("button", { name: "Back", exact: true }),
+      ).toBeVisible();
+      if (step < count) {
+        await expect(
+          dialog.getByRole("button", { name: "Next", exact: true }),
+        ).toBeVisible();
+        await page.keyboard.press("ArrowRight");
+      }
+    }
+    const dots = await dialog.locator(".tutorial-dots").boundingBox();
+    const done = await dialog
+      .getByRole("button", { name: "Done", exact: true })
+      .boundingBox();
+    expect(dots!.x + dots!.width).toBeLessThanOrEqual(done!.x);
+    await page.keyboard.press("Escape");
+  }
+});
+
+test("help dismissal animation survives navigation and ignores repeated interaction", async ({
+  page,
+  userId,
+}) => {
+  expect(userId).toBeTruthy();
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("/compose");
+  const wrapper = page.locator(".help-launcher");
+  const badge = page.getByRole("button", {
+    name: "Hide help button until reload.",
+    exact: true,
+  });
+  await expect(badge).toBeVisible();
+  await expect(badge).toHaveCSS("transition-duration", "0.15s");
+  await badge.hover();
+  await expect(badge).toHaveCSS("transform", "matrix(1.1, 0, 0, 1.1, 0, 0)");
+  expect(
+    await badge.evaluate(
+      (element) =>
+        getComputedStyle(element).color ===
+        getComputedStyle(document.querySelector(".help-cloud")!).color,
+    ),
+  ).toBe(true);
+  await page.clock.install();
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
+  await badge.evaluate((element) => {
+    (element as HTMLButtonElement).click();
+    (element as HTMLButtonElement).click();
+    (document.querySelector(".help-button") as HTMLButtonElement).click();
+    // Next's native history integration updates the pathname without unmounting the shared layout.
+    history.pushState(null, "", "/settings");
+  });
+  await wrapper.evaluate((element) => {
+    for (const animation of element.getAnimations()) animation.pause();
+  });
+  await expect(page).toHaveURL(/\/settings$/);
+  await expect(wrapper).toHaveAttribute("data-state", "dismissing");
+  await expect(wrapper).toHaveAttribute("inert", "");
+  await expect(wrapper).toHaveCSS("pointer-events", "none");
+  await expect(wrapper).toHaveCSS("transition-duration", "0.2s, 0.2s");
+  await expect(wrapper).toHaveCSS(
+    "transition-timing-function",
+    "ease-in, ease-in",
+  );
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  const transitions = await wrapper.evaluate((element) =>
+    element.getAnimations().map((animation) => ({
+      frames: (animation.effect as KeyframeEffect).getKeyframes(),
+      duration: animation.effect?.getTiming().duration,
+    })),
+  );
+  expect(
+    transitions.some(
+      ({ frames, duration }) =>
+        duration === 200 && frames.some((frame) => frame.opacity === "0"),
+    ),
+  ).toBe(true);
+  expect(
+    transitions.some(
+      ({ frames, duration }) =>
+        duration === 200 &&
+        frames.some((frame) => frame.transform === "scale(0.8)"),
+    ),
+  ).toBe(true);
+  const midway = await wrapper.evaluate((element) => {
+    for (const animation of element.getAnimations())
+      animation.currentTime = 100;
+    const style = getComputedStyle(element);
+    return {
+      opacity: Number(style.opacity),
+      scale: new DOMMatrix(style.transform).a,
+    };
+  });
+  expect(midway.opacity).toBeGreaterThan(0);
+  expect(midway.opacity).toBeLessThan(1);
+  expect(midway.scale).toBeGreaterThan(0.8);
+  expect(midway.scale).toBeLessThan(1);
+  await page.clock.runFor(199);
+  await expect(wrapper).toHaveCount(1);
+  await page.clock.runFor(1);
+  await expect(wrapper).toHaveCount(0);
+  await expect(page.locator("#main-content")).toBeFocused();
+  await page.clock.resume();
+  await page.reload();
+  await expect(badge).toBeVisible();
+});
+
+test("help touch target and instant reduced-motion dismissal preserve scroll", async ({
+  page,
+  userId,
+  isMobile,
+}) => {
+  expect(userId).toBeTruthy();
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/compose");
+  const badge = page.getByRole("button", {
+    name: "Hide help button until reload.",
+    exact: true,
+  });
+  await expect(badge).toBeVisible();
+  await page.evaluate(() => window.scrollTo(0, 200));
+  const scrollY = await page.evaluate(() => window.scrollY);
+  const box = (await badge.boundingBox())!;
+  if (isMobile) {
+    const target = await badge.evaluate((element) => {
+      const style = getComputedStyle(element, "::before");
+      return {
+        width: parseFloat(style.width),
+        height: parseFloat(style.height),
+        background: style.backgroundColor,
+      };
+    });
+    expect(target).toEqual({
+      width: 32,
+      height: 32,
+      background: "rgba(0, 0, 0, 0)",
+    });
+    // Five pixels outside the visible circle, inside its transparent touch target.
+    expect(
+      await page.evaluate(
+        ({ x, y }) => document.elementFromPoint(x, y)?.className,
+        { x: box.x - 5, y: box.y + 10 },
+      ),
+    ).toBe("help-dismiss");
+  }
+  await page.clock.install();
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
+  if (isMobile) await page.touchscreen.tap(box.x - 5, box.y + 10);
+  else await badge.click();
+  // No timer advancement: reduced motion removes the wrapper immediately.
+  await expect(page.locator(".help-launcher")).toHaveCount(0);
+  await expect(page.locator("#main-content")).toBeFocused();
+  expect(await page.evaluate(() => window.scrollY)).toBe(scrollY);
+});

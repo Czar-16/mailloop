@@ -12,6 +12,7 @@ export type CampaignProgressData = {
   review: number;
   pendingDispatch: boolean;
   outstanding: number;
+  sending: number;
   nextSendAt: string | null;
 };
 
@@ -86,6 +87,9 @@ export async function readCampaignProgress(
             s.deliveryState !== "UNCERTAIN",
         ),
         outstanding,
+        sending: batchSends.filter(
+          (s) => s.status === "QUEUED" && s.deliveryState === "ATTEMPTING",
+        ).length,
         nextSendAt: user.nextSendAt?.toISOString() ?? null,
       }
     : null;

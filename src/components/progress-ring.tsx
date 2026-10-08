@@ -162,7 +162,7 @@ export function ProgressRing({
             r="70"
             fill="none"
             stroke={idle ? `url(#${gradientId})` : "var(--ring-track)"}
-            strokeWidth="12"
+            strokeWidth={idle ? 11 : 12}
           />
           {segments.map((segment) => {
             const length = total ? (segment.count / total) * circumference : 0;

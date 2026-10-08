@@ -9,6 +9,7 @@ import { ThemeControl } from "@/components/theme";
 import { PageTransition } from "@/components/page-transition";
 import { WorkspaceLoading } from "@/components/workspace-loading";
 import { NotificationProvider } from "@/components/notifications";
+import { HelpTutorial } from "@/components/help-tutorial";
 export const dynamic = "force-dynamic";
 export const metadata = { robots: { index: false, follow: false } };
 async function AuthenticatedLayout({
@@ -39,7 +40,11 @@ async function AuthenticatedLayout({
           </div>
         </div>
       </header>
-      <main id="main-content" className="page-container pt-[26px] pb-[60px]">
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="page-container pt-[26px] pb-[60px]"
+      >
         {!user.preferredRoles.length && <RoleSetup />}
         <PageTransition>{children}</PageTransition>
       </main>
@@ -47,6 +52,7 @@ async function AuthenticatedLayout({
         <span translate="no">Mailloop</span> · Thoughtful outreach, one
         introduction at a time.
       </footer>
+      <HelpTutorial />
     </NotificationProvider>
   );
 }
