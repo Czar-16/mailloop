@@ -5,7 +5,6 @@ import { PageHeading, EmptyState } from "@/components/common";
 import { TemplateForm, DeleteButton } from "@/components/forms";
 import { Pagination } from "@/components/pagination";
 import { pageNumber } from "@/lib/params";
-import { Button } from "@/components/ui/button";
 export const metadata = { title: "Templates" };
 export default async function Templates({
   searchParams,
@@ -31,42 +30,40 @@ export default async function Templates({
   return (
     <>
       <PageHeading
+        eyebrow="Your words, ready to go"
         title="Templates"
-        description="Create and manage reusable messages for your email campaigns."
+        description="Start with a good introduction. Make it personal for every recipient."
       />
-      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-2">
-        <section className="min-w-0 space-y-4" aria-label="Saved templates">
-          <div className="flex min-h-11 items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold leading-[26px]">
-              Saved Templates
-            </h2>
-            <p className="text-sm tabular-nums text-body">{total} saved</p>
-          </div>
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
+        <section className="space-y-4">
           {!templates.length ? (
             <EmptyState
-              title="No templates yet"
+              title="Your first introduction"
               description="Create a template alongside this list. Use placeholders to personalize each email."
             />
           ) : (
             templates.map((t) => (
-              <article key={t.id} className="panel p-4 sm:p-6">
+              <article key={t.id} className="panel p-6">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <h3 className="break-words text-lg font-semibold leading-[26px]">
+                    <h2 className="break-words text-xl font-semibold tracking-tight">
                       {t.name}
-                    </h3>
+                    </h2>
                     <p className="mt-2 break-words text-sm text-body">
                       {t.subject}
                     </p>
                   </div>
                   <div className="flex gap-1">
-                    <Button asChild variant="outline" size="sm">
-                      <Link href={`/templates?edit=${t.id}`}>Edit</Link>
-                    </Button>
+                    <Link
+                      href={`/templates?edit=${t.id}`}
+                      className="inline-flex min-h-11 items-center px-3 text-sm text-link"
+                    >
+                      Edit
+                    </Link>
                     <DeleteButton id={t.id} kind="template" />
                   </div>
                 </div>
-                <p className="mt-4 line-clamp-3 whitespace-pre-wrap break-words border-t border-border pt-4 text-sm leading-[22px] text-body">
+                <p className="mt-4 line-clamp-3 whitespace-pre-wrap break-words text-sm leading-6 text-body">
                   {t.body}
                 </p>
               </article>

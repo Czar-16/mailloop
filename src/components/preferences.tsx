@@ -82,8 +82,8 @@ export function Preferences({
     setResult(undefined);
   }
   return (
-    <section className="panel mb-6 space-y-4 p-4 sm:p-6">
-      <h2 className="text-lg font-semibold leading-[26px]">
+    <section className="panel mb-6 space-y-4 p-6">
+      <h2 className="text-xl font-semibold">
         {setup ? "Choose Your Preferred Roles" : "Outreach Preferences"}
       </h2>
       <p className="text-sm text-body">
@@ -96,7 +96,7 @@ export function Preferences({
           <Button
             key={v}
             variant="outline"
-            className="h-auto max-w-full whitespace-normal break-words border-link/25 bg-accent-soft py-2 text-link"
+            className="h-auto max-w-full whitespace-normal break-words py-2"
             disabled={pending}
             onClick={() => {
               setValues(values.filter((r) => r !== v));
@@ -125,7 +125,7 @@ export function Preferences({
           });
         }}
       >
-        <label className="block text-sm font-medium [&_input]:mt-2 [&_textarea]:mt-2">
+        <label className="block text-sm">
           Custom role
           <Input
             ref={customInput}
@@ -140,7 +140,7 @@ export function Preferences({
           />
         </label>
         {roleError && (
-          <p id="preference-role-error" className="text-sm text-error-deep">
+          <p id="preference-role-error" className="text-xs text-error-deep">
             {roleError}
           </p>
         )}
@@ -153,7 +153,7 @@ export function Preferences({
           Add Role
         </Button>
         {!setup && (
-          <label className="block text-sm font-medium [&_input]:mt-2 [&_textarea]:mt-2">
+          <label className="block text-sm">
             Resume URL (optional HTTPS link)
             <Input
               ref={urlInput}
@@ -178,7 +178,7 @@ export function Preferences({
           </label>
         )}
         {result?.fieldErrors?.resumeUrl && (
-          <p id="preference-url-error" className="text-sm text-error-deep">
+          <p id="preference-url-error" className="text-xs text-error-deep">
             {result.fieldErrors.resumeUrl}
           </p>
         )}

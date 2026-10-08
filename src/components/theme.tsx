@@ -18,7 +18,7 @@ function apply(theme: Theme) {
   document.documentElement.dataset.theme = dark ? "dark" : "light";
   document
     .querySelector('meta[name="theme-color"]')
-    ?.setAttribute("content", dark ? "#050709" : "#f8fafc");
+    ?.setAttribute("content", dark ? "#10141c" : "#f8fafc");
 }
 function subscribe(callback: () => void) {
   const update = () => {
@@ -35,15 +35,14 @@ function subscribe(callback: () => void) {
     query.removeEventListener("change", update);
   };
 }
-export function ThemeControl({ label = "Theme" }: { label?: string }) {
+export function ThemeControl() {
   const theme = useSyncExternalStore(subscribe, getTheme, () => "system");
   return (
     <label className="inline-flex items-center gap-2 text-xs text-body">
-      <span className="hidden sm:inline">{label}</span>
+      Theme
       <select
         name="theme"
-        aria-label={label}
-        className="text-base"
+        aria-label="Theme"
         value={theme}
         onChange={(e) => {
           const value = e.target.value as Theme;

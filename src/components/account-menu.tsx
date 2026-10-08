@@ -56,7 +56,7 @@ export function AccountMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         variant="outline"
-        className="size-11 shrink-0 rounded-full border-border bg-accent-soft p-0 font-semibold text-link hover:bg-muted"
+        className="size-11 rounded-full p-0"
         onClick={() => setOpen(!open)}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown") {
@@ -71,7 +71,7 @@ export function AccountMenu({
         <div
           role="menu"
           aria-label="Account"
-          className="panel absolute right-0 z-40 mt-3 w-64 max-w-[calc(100vw-32px)] bg-muted p-4 shadow-overlay"
+          className="panel absolute right-0 z-40 mt-2 w-64 max-w-[calc(100vw-48px)] p-4 shadow-lg"
           onBlur={(e) => {
             if (!e.currentTarget.contains(e.relatedTarget as Node))
               setOpen(false);

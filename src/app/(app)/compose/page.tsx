@@ -2,6 +2,7 @@ import Form from "next/form";
 import { requireUser } from "@/lib/session";
 import { db } from "@/lib/db";
 import { quotaWhere } from "@/lib/campaigns";
+import { PageHeading } from "@/components/common";
 import { Compose } from "@/components/compose";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -95,34 +96,37 @@ export default async function ComposePage({
     };
   });
   return (
-    <Compose
-      templates={templates}
-      contacts={recipients}
-      used={used}
-      roles={user.preferredRoles}
-      resumeUrl={user.resumeUrl}
-      resume={attachment?.fileName ?? null}
-      connected={user.gmailAuthorized && !!user.encryptedRefreshToken}
-      search={
-        <Form action="/compose" className="flex gap-2">
-          <label htmlFor="compose-search" className="sr-only">
-            Search recipients
-          </label>
-          <Input
-            id="compose-search"
-            name="q"
-            defaultValue={q}
-            autoComplete="off"
-            placeholder="Search name, email, or company…"
-          />
-          <Button variant="outline" type="submit">
-            Search
-          </Button>
-        </Form>
-      }
-      pagination={
-        <Pagination path="/compose" page={page} total={total} query={{ q }} />
-      }
-    />
+    <>
+      <PageHeading
+        eyebrow="A thoughtful introduction"
+        title="Make your next connection."
+        description="Choose your words, build a shortlist, and see exactly what each person will receive."
+      />
+      <Form action="/compose" className="mb-6 flex max-w-xl gap-2">
+        <label htmlFor="compose-search" className="sr-only">
+          Search recipients
+        </label>
+        <Input
+          id="compose-search"
+          name="q"
+          defaultValue={q}
+          autoComplete="off"
+          placeholder="Find a recipient by name, email, or company…"
+        />
+        <Button variant="outline" type="submit">
+          Search
+        </Button>
+      </Form>
+      <Compose
+        templates={templates}
+        contacts={recipients}
+        used={used}
+        roles={user.preferredRoles}
+        resumeUrl={user.resumeUrl}
+        resume={attachment?.fileName ?? null}
+        connected={user.gmailAuthorized && !!user.encryptedRefreshToken}
+      />
+      <Pagination path="/compose" page={page} total={total} query={{ q }} />
+    </>
   );
 }

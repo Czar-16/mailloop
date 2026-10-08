@@ -1,7 +1,7 @@
 import { requireUser } from "@/lib/session";
 import { signOut } from "@/auth";
 import { Wordmark } from "@/components/common";
-import { Sidebar } from "@/components/sidebar";
+import { Navigation } from "@/components/navigation";
 import { AccountMenu } from "@/components/account-menu";
 import { RoleSetup } from "@/components/preferences";
 import { ThemeControl } from "@/components/theme";
@@ -14,23 +14,12 @@ export default async function AppLayout({
 }) {
   const user = await requireUser();
   return (
-    <div className="min-h-dvh lg:pl-60">
-      <header className="border-b border-border bg-sidebar">
-        <div className="page-container flex min-h-18 items-center justify-between gap-2 py-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <Sidebar />
-            <div className="lg:hidden">
-              <Wordmark compact />
-            </div>
-            <span className="hidden text-sm text-muted-foreground lg:block">
-              Your outreach workspace
-            </span>
-          </div>
-          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+    <>
+      <header className="border-b border-border bg-card">
+        <div className="page-container flex flex-wrap items-center justify-between gap-3 py-4">
+          <Wordmark />
+          <div className="flex min-w-0 items-center gap-3">
             <ThemeControl />
-            <span className="hidden max-w-64 truncate text-sm text-body md:block">
-              {user.email}
-            </span>
             <AccountMenu
               name={user.name}
               email={user.email}
@@ -41,21 +30,21 @@ export default async function AppLayout({
               }}
             />
           </div>
+          <div className="w-full pt-1">
+            <Navigation />
+          </div>
         </div>
       </header>
-      <main
-        id="main-content"
-        className="workspace-content page-container py-6 sm:py-8"
-      >
+      <main id="main-content" className="page-container py-10 sm:py-12">
         {!user.preferredRoles.length && (
           <RoleSetup resumeUrl={user.resumeUrl} />
         )}
         {children}
       </main>
-      <footer className="page-container border-t border-border py-6 text-xs text-muted-foreground">
+      <footer className="page-container border-t border-border py-6 text-xs text-body">
         <span translate="no">Mailloop</span> · Thoughtful outreach, one
         introduction at a time.
       </footer>
-    </div>
+    </>
   );
 }

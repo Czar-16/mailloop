@@ -68,14 +68,14 @@ export function ContactImport({
     );
   }
   return (
-    <section className="panel min-w-0 space-y-4 p-4 sm:p-6">
-      <h2 className="text-lg font-semibold leading-[26px]">Import Contacts</h2>
+    <section className="panel min-w-0 space-y-4 p-6">
+      <h2 className="text-xl font-semibold">Import Contacts</h2>
       <p className="text-sm text-body">
         Paste emails separated by commas, semicolons, or newlines, or CSV with
         an email header. Name, company, and jobRole columns are optional. Review
         suggested names and choose roles before saving. Up to 1,000 rows.
       </p>
-      <label className="block text-sm font-medium [&_input]:mt-2 [&_textarea]:mt-2">
+      <label className="block text-sm">
         CSV file
         <Input
           type="file"
@@ -95,7 +95,7 @@ export function ContactImport({
           }}
         />
       </label>
-      <label className="block text-sm font-medium [&_input]:mt-2 [&_textarea]:mt-2">
+      <label className="block text-sm">
         Or paste your list
         <Textarea
           name="list"
@@ -113,7 +113,7 @@ export function ContactImport({
           placeholder="alex.smith@example.com; sam@example.com…"
         />
       </label>
-      <label className="block text-sm font-medium [&_input]:mt-2 [&_textarea]:mt-2">
+      <label className="block text-sm">
         Bulk Job Role
         <Input
           name="bulkRole"
@@ -139,12 +139,7 @@ export function ContactImport({
             {rows.filter((r) => r.state === "duplicate").length} duplicates ·{" "}
             {rows.filter((r) => r.state === "invalid").length} need correction
           </p>
-          <div
-            role="region"
-            aria-label="Editable import preview table"
-            tabIndex={0}
-            className="max-h-96 overflow-auto rounded-sm border border-border"
-          >
+          <div className="max-h-96 overflow-auto">
             <table className="w-full text-sm">
               <caption className="sr-only">Editable import preview</caption>
               <thead>
@@ -186,25 +181,14 @@ export function ContactImport({
                           </td>
                         ),
                       )}
-                      <td>
-                        <span
-                          className={`inline-flex rounded-full border px-2 py-1 text-xs font-medium leading-[18px] ${r.state === "valid" ? "border-success/25 bg-success-soft text-success" : r.state === "invalid" ? "border-destructive/25 bg-destructive-soft text-destructive" : "border-border bg-muted text-body"}`}
-                        >
-                          {r.state}
-                        </span>
-                        {r.error && (
-                          <p className="mt-2 min-w-40 text-sm leading-[22px] text-warning">
-                            {r.error}
-                          </p>
-                        )}
-                      </td>
+                      <td>{r.error ?? r.state}</td>
                     </tr>
                   ))}
               </tbody>
             </table>
           </div>
           {rows.length > 50 && (
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-3">
               <Button
                 variant="outline"
                 disabled={pending || previewPage === 1}

@@ -62,7 +62,7 @@ export function Feedback({ result }: { result?: ActionResult }) {
 }
 function FieldError({ result, name }: { result?: ActionResult; name: string }) {
   return result?.fieldErrors?.[name] ? (
-    <p id={`error-${name}`} className="mt-2 text-sm text-error-deep">
+    <p id={`error-${name}`} className="mt-2 text-xs text-error-deep">
       {result.fieldErrors[name]}
     </p>
   ) : null;
@@ -84,10 +84,7 @@ export function DeleteButton({
         Delete
       </Button>
       <dialog ref={dialog} aria-labelledby={`delete-${id}`}>
-        <h2
-          id={`delete-${id}`}
-          className="text-lg font-semibold leading-[26px]"
-        >
+        <h2 id={`delete-${id}`} className="text-xl font-semibold">
           Delete this {kind}?
         </h2>
         <p className="mt-3 text-sm leading-6 text-body">
@@ -149,7 +146,7 @@ export function TemplateForm({
   return (
     <form
       ref={formRef}
-      className="panel space-y-5 p-4 sm:p-6"
+      className="panel space-y-5 p-6"
       onChange={() => setDirty(true)}
       onSubmit={(event) => {
         event.preventDefault();
@@ -165,7 +162,7 @@ export function TemplateForm({
         });
       }}
     >
-      <h2 className="text-lg font-semibold leading-[26px]">
+      <h2 className="text-xl font-semibold tracking-tight">
         {template ? "Edit Template" : "New Template"}
       </h2>
       <p className="text-sm text-body">
@@ -208,8 +205,8 @@ export function TemplateForm({
         ))}
       </div>
       {!template && (
-        <details open className="border-y border-border py-4">
-          <summary className="min-h-11 cursor-pointer font-medium text-body">
+        <details open>
+          <summary className="min-h-11 cursor-pointer">
             Reference Template
           </summary>
           <p className="mt-3 text-sm">{example.subject}</p>
@@ -308,21 +305,21 @@ export function TemplateForm({
           }
           name="body"
           defaultValue={template?.body}
-          rows={8}
+          rows={10}
           required
           maxLength={20000}
           autoComplete="off"
           placeholder="Hi {{name}},…"
         />
         <FieldError result={result} name="body" />
-        <p className="mt-2 text-sm leading-[22px] text-body">
+        <p className="mt-2 text-xs leading-5 text-body">
           Personalize with <code>{"{{name}}"}</code>,{" "}
           <code>{"{{company}}"}</code>, and <code>{"{{role}}"}</code>. Messages
           are sent as plain text.
         </p>
       </div>
       <Feedback result={result} />
-      <div className="flex flex-wrap gap-2 border-t border-border pt-4">
+      <div className="flex gap-2">
         <Button type="submit" disabled={pending}>
           {pending ? "Saving…" : "Save Template"}
         </Button>
@@ -366,7 +363,7 @@ export function ContactForm({
   return (
     <form
       ref={formRef}
-      className="panel space-y-4 p-4 sm:p-6"
+      className="panel space-y-4 p-6"
       onChange={() => setDirty(true)}
       onSubmit={(event) => {
         event.preventDefault();
@@ -387,7 +384,7 @@ export function ContactForm({
         });
       }}
     >
-      <h2 className="text-lg font-semibold leading-[26px]">
+      <h2 className="text-xl font-semibold">
         {contact ? "Edit Contact" : "New Contact"}
       </h2>
       {contact && <input type="hidden" name="id" value={contact.id} />}
@@ -463,7 +460,7 @@ export function ContactForm({
           <FieldError result={result} name={f.name} />
         </div>
       ))}
-      <p className="text-sm leading-[22px] text-body">
+      <p className="text-xs text-body">
         Names from email addresses are suggestions. Correct them before saving.
         Enter actual names, companies, and roles here.
       </p>
@@ -476,7 +473,7 @@ export function ContactForm({
         }}
       />
       <Feedback result={result} />
-      <div className="flex flex-wrap gap-2 border-t border-border pt-4">
+      <div className="flex gap-2">
         <Button type="submit" disabled={pending}>
           {pending ? "Saving…" : "Save Contact"}
         </Button>
