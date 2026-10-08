@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import { WorkspaceSkeleton } from "@/components/workspace-skeleton";
 import Form from "next/form";
 import { requireUser } from "@/lib/session";
 import { db } from "@/lib/db";
@@ -9,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Pagination } from "@/components/pagination";
 import { pageNumber } from "@/lib/params";
 export const metadata = { title: "Compose" };
-export default async function ComposePage({
+async function ComposePageContent({
   searchParams,
 }: {
   searchParams: Promise<{ q?: string; page?: string }>;
@@ -97,11 +99,6 @@ export default async function ComposePage({
   });
   return (
     <>
-      <PageHeading
-        eyebrow="A thoughtful introduction"
-        title="Make your next connection."
-        description="Choose your words, build a shortlist, and see exactly what each person will receive."
-      />
       <Form
         action="/compose"
         className="mb-[18px] grid grid-cols-[minmax(0,1fr)_auto] gap-2"
@@ -133,6 +130,23 @@ export default async function ComposePage({
         connected={user.gmailAuthorized && !!user.encryptedRefreshToken}
       />
       <Pagination path="/compose" page={page} total={total} query={{ q }} />
+    </>
+  );
+}
+
+export default function ComposePage(
+  props: Parameters<typeof ComposePageContent>[0],
+) {
+  return (
+    <>
+      <PageHeading
+        eyebrow="A thoughtful introduction"
+        title="Make your next connection."
+        description="Choose your words, build a shortlist, and see exactly what each person will receive."
+      />
+      <Suspense fallback={<WorkspaceSkeleton page="compose" heading={false} />}>
+        <ComposePageContent {...props} />
+      </Suspense>
     </>
   );
 }

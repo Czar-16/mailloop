@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import { WorkspaceSkeleton } from "@/components/workspace-skeleton";
 import Link from "next/link";
 import { requireUser } from "@/lib/session";
 import { db } from "@/lib/db";
@@ -6,7 +8,7 @@ import { TemplateForm, DeleteButton } from "@/components/forms";
 import { Pagination } from "@/components/pagination";
 import { pageNumber } from "@/lib/params";
 export const metadata = { title: "Templates" };
-export default async function Templates({
+async function TemplatesContent({
   searchParams,
 }: {
   searchParams: Promise<{ edit?: string; page?: string }>;
@@ -40,11 +42,6 @@ export default async function Templates({
   ]);
   return (
     <>
-      <PageHeading
-        eyebrow="Templates"
-        title="Write once, personalise for everyone."
-        description="Type on the left. The real email updates live on the right."
-      />
       <TemplateForm
         key={editing?.id ?? "new"}
         template={editing ?? undefined}
@@ -90,6 +87,25 @@ export default async function Templates({
           <Pagination path="/templates" page={page} total={total} />
         </section>
       </div>
+    </>
+  );
+}
+
+export default function Templates(
+  props: Parameters<typeof TemplatesContent>[0],
+) {
+  return (
+    <>
+      <PageHeading
+        eyebrow="Templates"
+        title="Write once, personalise for everyone."
+        description="Type on the left. The real email updates live on the right."
+      />
+      <Suspense
+        fallback={<WorkspaceSkeleton page="templates" heading={false} />}
+      >
+        <TemplatesContent {...props} />
+      </Suspense>
     </>
   );
 }

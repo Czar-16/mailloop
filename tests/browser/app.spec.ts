@@ -92,6 +92,14 @@ test("workspace pages are accessible and fit the viewport", async ({
   ]) {
     await page.goto(`/${route}`);
     await expect(page.locator("main h1")).toBeVisible();
+    await expect(page.locator('[role="status"][aria-busy="true"]')).toHaveCount(
+      0,
+    );
+    await page.locator(".page-transition").evaluate(async (element) => {
+      await Promise.all(
+        element.getAnimations().map((animation) => animation.finished),
+      );
+    });
     const result = await new AxeBuilder({ page }).analyze();
     expect(
       result.violations,
@@ -104,6 +112,289 @@ test("workspace pages are accessible and fit the viewport", async ({
     ).toBe(true);
   }
 });
+test("workspace tab entry motion preserves same-page updates and respects reduced motion", async ({
+  page,
+  userId,
+}) => {
+  expect(userId).toBeTruthy();
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("/compose");
+  const content = page.locator(".page-transition");
+  const original = await content.elementHandle();
+  const navigation = page.getByRole("navigation", { name: "Main navigation" });
+  await navigation
+    .getByRole("link", { name: "Templates", exact: true })
+    .focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/templates$/);
+  await expect(page.locator("main h1")).toBeVisible();
+  await expect(page.locator('[role="status"][aria-busy="true"]')).toHaveCount(
+    0,
+  );
+  expect(await original!.evaluate((element) => element.isConnected)).toBe(
+    false,
+  );
+  expect(
+    await content.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return [style.animationName, style.animationDuration];
+    }),
+  ).toEqual(["page-enter", "0.3s"]);
+
+  const nameInput = page.getByLabel("Template name", { exact: true });
+  for (const [theme, border] of [
+    ["Light", "rgb(109, 74, 255)"],
+    ["Dark", "rgb(139, 108, 255)"],
+  ]) {
+    await page
+      .getByRole("button", { name: `${theme} theme`, exact: true })
+      .click();
+    await nameInput.focus();
+    await expect(nameInput).toHaveCSS("border-top-color", border);
+    await expect(page.locator("form.panel")).toHaveCSS(
+      "border-top-color",
+      border,
+    );
+  }
+
+  const templatesContent = await content.elementHandle();
+  await page.getByLabel("Template name", { exact: true }).fill("UI check");
+  expect(
+    await templatesContent!.evaluate((element) => element.isConnected),
+  ).toBe(true);
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await navigation.getByRole("link", { name: "Contacts", exact: true }).click();
+  await expect(page).toHaveURL(/\/templates$/);
+  await page.getByLabel("Template name", { exact: true }).fill("");
+  page.once("dialog", (dialog) => dialog.accept());
+
+  for (const name of ["History", "Contacts", "Settings", "Compose"]) {
+    await navigation.getByRole("link", { name, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/${name.toLowerCase()}$`));
+    await expect(page.locator("main h1")).toBeVisible();
+    await expect(page.locator('[role="status"][aria-busy="true"]')).toHaveCount(
+      0,
+    );
+  }
+  await page.goBack();
+  await expect(page).toHaveURL(/\/settings$/);
+  await page.goForward();
+  await expect(page).toHaveURL(/\/compose$/);
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await navigation.getByRole("link", { name: "Contacts", exact: true }).click();
+  await expect(page).toHaveURL(/\/contacts$/);
+  expect(
+    await content.evaluate(
+      (element) => getComputedStyle(element).animationName,
+    ),
+  ).toBe("none");
+  const contactsContent = await content.elementHandle();
+  await page.evaluate(() => {
+    window.history.pushState(null, "", "/contacts?q=no-match");
+  });
+  await expect(page).toHaveURL(/q=no-match/);
+  expect(
+    await contactsContent!.evaluate((element) => element.isConnected),
+  ).toBe(true);
+});
+
+test("navigation highlight follows keyboard navigation, scrolling and resizing", async ({
+  page,
+  userId,
+}) => {
+  expect(userId).toBeTruthy();
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.goto("/compose");
+  const nav = page.getByRole("navigation", { name: "Main navigation" });
+  const pill = nav.locator(".workspace-nav-highlight");
+  await expect(pill).toHaveCount(1);
+  const expectAligned = async () => {
+    await expect
+      .poll(() =>
+        nav.evaluate((element) => {
+          const active = element
+            .querySelector('a[aria-current="page"]')!
+            .getBoundingClientRect();
+          const highlight = element
+            .querySelector(".workspace-nav-highlight")!
+            .getBoundingClientRect();
+          return (
+            Math.abs(active.x - highlight.x) < 1 &&
+            Math.abs(active.width - highlight.width) < 1
+          );
+        }),
+      )
+      .toBe(true);
+  };
+  await expectAligned();
+  await nav.getByRole("link", { name: "Settings", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/settings$/);
+  await expectAligned();
+  expect(await nav.evaluate((element) => element.scrollLeft)).toBeGreaterThan(
+    0,
+  );
+  await expect(pill).toHaveCSS("transition-duration", "0.3s, 0.3s, 0.3s");
+  await page.setViewportSize({ width: 1100, height: 800 });
+  await expectAligned();
+  await page.goBack();
+  await expect(page).toHaveURL(/\/compose$/);
+  await expectAligned();
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await nav.getByRole("link", { name: "Contacts", exact: true }).click();
+  await expect(page).toHaveURL(/\/contacts$/);
+  await expectAligned();
+  await expect(pill).toHaveCSS("transition-duration", "0s");
+  await expect(
+    nav.getByRole("link", { name: "Contacts", exact: true }),
+  ).toHaveCSS("transition-duration", "0s");
+});
+
+test("page skeletons stream while data loads and shimmer respects reduced motion", async ({
+  page,
+  userId,
+}) => {
+  const attachmentId = randomUUID();
+  await pool.query(
+    'INSERT INTO "Attachment" (id,"userId","fileName","storagePath") VALUES ($1,$2,$3,$4)',
+    [attachmentId, userId, "resume.pdf", "test-skeleton.pdf"],
+  );
+  await pool.query(
+    'UPDATE "User" SET "preferredRoles"=$2,"currentAttachmentId"=$3 WHERE id=$1',
+    [userId, ["Engineer"], attachmentId],
+  );
+  const blocker = await pool.connect();
+  try {
+    for (const [route, table] of [
+      ["compose", "Contact"],
+      ["templates", "Contact"],
+      ["history", "Send"],
+      ["contacts", "Contact"],
+      ["settings", "Attachment"],
+    ]) {
+      await page.emulateMedia({ reducedMotion: "no-preference" });
+      await blocker.query("BEGIN");
+      await blocker.query(`LOCK TABLE "${table}" IN ACCESS EXCLUSIVE MODE`);
+      try {
+        await page.goto(`/${route}`, { waitUntil: "commit" });
+        const loading = page.getByRole("status", {
+          name: `Loading ${route}`,
+          exact: true,
+        });
+        await expect(loading).toBeVisible();
+        await expect(
+          page.getByRole("navigation", { name: "Main navigation" }),
+        ).toBeVisible();
+        const skeleton = loading.locator(".skeleton").first();
+        expect(
+          await skeleton.evaluate(
+            (element) => getComputedStyle(element, "::after").animationName,
+          ),
+        ).toBe("skeleton-shimmer");
+        await page
+          .getByRole("button", { name: "Dark theme", exact: true })
+          .click();
+        await expect(page.locator("html")).toHaveAttribute(
+          "data-theme",
+          "dark",
+        );
+        await page.evaluate(async () => {
+          await Promise.all(
+            document
+              .getAnimations()
+              .filter(
+                (animation) =>
+                  animation.effect?.getTiming().iterations !== Infinity,
+              )
+              .map((animation) => animation.finished),
+          );
+        });
+        expect(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth + 1,
+          ),
+        ).toBe(true);
+        await page.emulateMedia({ reducedMotion: "reduce" });
+        expect(
+          await skeleton.evaluate(
+            (element) => getComputedStyle(element, "::after").display,
+          ),
+        ).toBe("none");
+        await page.screenshot({
+          path: `/tmp/mailloop-skeleton-${route}-${test.info().project.name}.png`,
+          fullPage: true,
+        });
+      } finally {
+        await blocker.query("ROLLBACK");
+      }
+      await expect(
+        page.locator('[role="status"][aria-busy="true"]'),
+      ).toHaveCount(0);
+      await expect(page.locator("main h1")).toBeVisible();
+    }
+  } finally {
+    await blocker.query("ROLLBACK");
+    blocker.release();
+  }
+});
+
+test("default queue ring is purple and selected recipients retain yellow in both themes", async ({
+  page,
+  userId,
+}) => {
+  await pool.query('UPDATE "User" SET "preferredRoles"=$2 WHERE id=$1', [
+    userId,
+    ["Engineer"],
+  ]);
+  await pool.query(
+    'INSERT INTO "Template" (id,"userId",name,subject,body) VALUES ($1,$2,$3,$4,$5)',
+    [
+      randomUUID(),
+      userId,
+      "UI template",
+      "Hello {{name}}",
+      "Hi {{name}}, exploring {{role}}.",
+    ],
+  );
+  await pool.query(
+    'INSERT INTO "Contact" (id,"userId",name,email,"jobRole") VALUES ($1,$2,$3,$4,$5)',
+    [randomUUID(), userId, "UI Recipient", "ui@example.test", "Engineer"],
+  );
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/compose");
+  const ring = page.locator(".progress-ring");
+  const recipient = page.getByRole("checkbox", { name: /UI Recipient/ });
+  for (const [theme, yellow] of [
+    ["Light", "rgb(217, 154, 0)"],
+    ["Dark", "rgb(251, 191, 36)"],
+  ]) {
+    await page
+      .getByRole("button", { name: `${theme} theme`, exact: true })
+      .click();
+    await expect(ring).toContainText("0:00");
+    await expect(ring.locator("circle").first()).toHaveAttribute(
+      "stroke",
+      /^url\(#.+\)$/,
+    );
+    expect(
+      await ring
+        .locator(".progress-arc")
+        .evaluate((element) => getComputedStyle(element).filter),
+    ).not.toBe("none");
+    await recipient.check();
+    await expect(ring).toContainText("0:40");
+    await expect(ring.locator(".progress-arc")).toHaveCount(0);
+    const selectedArc = ring.locator('circle[stroke="var(--queued)"]');
+    await expect(selectedArc).toHaveCSS("opacity", "1");
+    await expect(selectedArc).toHaveCSS("stroke", yellow);
+    await expect(selectedArc).toHaveCSS("filter", "none");
+    await recipient.uncheck();
+    await expect(ring.locator(".progress-arc")).toHaveCount(1);
+  }
+});
+
 test("template, contact import, preview, and individual campaign queue", async ({
   page,
   userId,
@@ -736,6 +1027,14 @@ test("redesign: populated pages in both themes, live recipient preview, cursor i
             : "";
       await page.goto(`/${route}${query}`);
       await expect(page.locator("main h1")).toBeVisible();
+      await expect(
+        page.locator('[role="status"][aria-busy="true"]'),
+      ).toHaveCount(0);
+      await page.locator(".page-transition").evaluate(async (element) => {
+        await Promise.all(
+          element.getAnimations().map((animation) => animation.finished),
+        );
+      });
       expect(
         (await new AxeBuilder({ page }).analyze()).violations,
         `${route}/${theme}`,

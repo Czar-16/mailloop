@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import { WorkspaceSkeleton } from "@/components/workspace-skeleton";
 import { DateTime } from "@/components/date-time";
 import Link from "next/link";
 import { requireUser } from "@/lib/session";
@@ -10,7 +12,7 @@ import { pageNumber } from "@/lib/params";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 export const metadata = { title: "Contacts" };
-export default async function Contacts({
+async function ContactsContent({
   searchParams,
 }: {
   searchParams: Promise<{ edit?: string; q?: string; page?: string }>;
@@ -63,11 +65,6 @@ export default async function Contacts({
   ]);
   return (
     <>
-      <PageHeading
-        eyebrow="People worth reaching out to"
-        title="Contacts"
-        description="Build your shortlist, one person or one CSV at a time."
-      />
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <section className="min-w-0">
           <form
@@ -172,6 +169,23 @@ export default async function Contacts({
           roles={user.preferredRoles}
         />
       </div>
+    </>
+  );
+}
+
+export default function Contacts(props: Parameters<typeof ContactsContent>[0]) {
+  return (
+    <>
+      <PageHeading
+        eyebrow="People worth reaching out to"
+        title="Contacts"
+        description="Build your shortlist, one person or one CSV at a time."
+      />
+      <Suspense
+        fallback={<WorkspaceSkeleton page="contacts" heading={false} />}
+      >
+        <ContactsContent {...props} />
+      </Suspense>
     </>
   );
 }

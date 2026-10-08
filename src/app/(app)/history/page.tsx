@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import { WorkspaceSkeleton } from "@/components/workspace-skeleton";
 import { CampaignProgress } from "@/components/campaign-progress";
 import { requireUser } from "@/lib/session";
 import { db } from "@/lib/db";
@@ -10,7 +12,7 @@ import { pageNumber } from "@/lib/params";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 export const metadata = { title: "History" };
-export default async function History({
+async function HistoryContent({
   searchParams,
 }: {
   searchParams: Promise<{
@@ -299,5 +301,20 @@ export default async function History({
         query={{ q, status: status ?? "", campaign: focused?.id ?? "" }}
       />
     </>
+  );
+}
+
+export default async function History(
+  props: Parameters<typeof HistoryContent>[0],
+) {
+  const params = await props.searchParams;
+  return (
+    <Suspense
+      fallback={
+        <WorkspaceSkeleton page="history" showProgress={!!params.campaign} />
+      }
+    >
+      <HistoryContent {...props} />
+    </Suspense>
   );
 }

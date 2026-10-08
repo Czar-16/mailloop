@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import { WorkspaceSkeleton } from "@/components/workspace-skeleton";
 import { Preferences } from "@/components/preferences";
 import { requireUser } from "@/lib/session";
 import { db } from "@/lib/db";
@@ -6,7 +8,7 @@ import { PageHeading } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Resume } from "@/components/resume";
 export const metadata = { title: "Settings" };
-export default async function Settings() {
+async function SettingsContent() {
   const user = await requireUser();
   const attachment = user.currentAttachmentId
     ? await db.attachment.findFirst({
@@ -17,11 +19,6 @@ export default async function Settings() {
   const connected = user.gmailAuthorized && !!user.encryptedRefreshToken;
   return (
     <>
-      <PageHeading
-        eyebrow="Ready for your next chapter"
-        title="Settings"
-        description="Manage your Gmail connection and the resume that goes with your introductions."
-      />
       <Preferences roles={user.preferredRoles} resumeUrl={user.resumeUrl} />
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
         <section className="panel space-y-5 p-6">
@@ -77,6 +74,23 @@ export default async function Settings() {
           confirm delivery.
         </p>
       </section>
+    </>
+  );
+}
+
+export default function Settings() {
+  return (
+    <>
+      <PageHeading
+        eyebrow="Ready for your next chapter"
+        title="Settings"
+        description="Manage your Gmail connection and the resume that goes with your introductions."
+      />
+      <Suspense
+        fallback={<WorkspaceSkeleton page="settings" heading={false} />}
+      >
+        <SettingsContent />
+      </Suspense>
     </>
   );
 }

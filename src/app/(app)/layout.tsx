@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { requireUser } from "@/lib/session";
 import { signOut } from "@/auth";
 import { Wordmark } from "@/components/common";
@@ -5,9 +6,11 @@ import { Navigation } from "@/components/navigation";
 import { AccountMenu } from "@/components/account-menu";
 import { RoleSetup } from "@/components/preferences";
 import { ThemeControl } from "@/components/theme";
+import { PageTransition } from "@/components/page-transition";
+import { WorkspaceLoading } from "@/components/workspace-loading";
 export const dynamic = "force-dynamic";
 export const metadata = { robots: { index: false, follow: false } };
-export default async function AppLayout({
+async function AuthenticatedLayout({
   children,
 }: {
   children: React.ReactNode;
@@ -39,12 +42,20 @@ export default async function AppLayout({
         {!user.preferredRoles.length && (
           <RoleSetup resumeUrl={user.resumeUrl} />
         )}
-        {children}
+        <PageTransition>{children}</PageTransition>
       </main>
       <footer className="page-container border-t border-border py-6 text-xs text-body">
         <span translate="no">Mailloop</span> · Thoughtful outreach, one
         introduction at a time.
       </footer>
     </>
+  );
+}
+
+export default function AppLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense fallback={<WorkspaceLoading shell />}>
+      <AuthenticatedLayout>{children}</AuthenticatedLayout>
+    </Suspense>
   );
 }

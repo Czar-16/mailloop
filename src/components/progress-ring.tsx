@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { useId } from "react";
 export function estimateSeconds(
   queued: number,
   nextSendAt: string | null = null,
@@ -24,6 +24,7 @@ export function ProgressRing({
   seconds: number;
   draft?: boolean;
 }) {
+  const gradientId = useId();
   const segments = [
     { label: "Sent", count: sent, color: "var(--success)" },
     { label: "Queued", count: queued, color: "var(--queued)" },
@@ -33,6 +34,7 @@ export function ProgressRing({
       : []),
   ];
   const total = segments.reduce((sum, segment) => sum + segment.count, 0);
+  const idle = draft && total === 0;
   const circumference = 2 * Math.PI * 70;
   const nonempty = segments.filter((segment) => segment.count > 0).length;
   let offset = 0;
@@ -58,12 +60,19 @@ export function ProgressRing({
           className="-rotate-90"
           aria-hidden="true"
         >
+          <defs>
+            <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stopColor="var(--accent)" />
+              <stop offset="100%" stopColor="var(--accent2)" />
+            </linearGradient>
+          </defs>
           <circle
+            className={idle ? "progress-arc" : undefined}
             cx="85"
             cy="85"
             r="70"
             fill="none"
-            stroke="var(--border)"
+            stroke={idle ? `url(#${gradientId})` : "var(--ring-track)"}
             strokeWidth="12"
           />
           {segments.map((segment) => {
@@ -83,7 +92,7 @@ export function ProgressRing({
                 strokeLinecap="round"
                 strokeDasharray={`${Math.max(0, length - gap)} ${circumference}`}
                 strokeDashoffset={-start - gap / 2}
-                style={{ opacity: segment.count ? 1 : 0 } as CSSProperties}
+                style={{ opacity: segment.count ? 1 : 0 }}
               />
             );
           })}
