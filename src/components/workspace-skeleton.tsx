@@ -231,7 +231,16 @@ export function PageContentSkeleton({
           <Skeleton className="mt-6 h-4 w-40" />
           <div className="mt-8">
             <CardSkeleton>
+              <Skeleton className="h-4 w-3/4" />
+              <div className="space-y-2 py-2">
+                {[0, 1, 2, 3, 4].map((index) => (
+                  <Skeleton key={index} className="h-4 w-3/4" />
+                ))}
+              </div>
+              <Skeleton className="h-32 w-full" />
+              <Skeleton className="h-44 w-full" />
               <FieldSkeleton multiline />
+              <FieldSkeleton />
               <Skeleton className="h-11 w-40" />
             </CardSkeleton>
           </div>

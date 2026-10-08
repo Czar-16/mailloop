@@ -428,10 +428,10 @@ test("template, contact import, preview, and individual campaign queue", async (
   await page.getByLabel("Bulk Job Role", { exact: true }).fill("Engineer");
   await page.getByRole("button", { name: "Preview Import" }).click();
   await expect(
-    page.getByText("2 ready · 1 duplicates · 1 need correction"),
+    page.getByText("2 valid · 1 duplicate · 1 invalid"),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Import Valid Contacts" }),
+    page.getByRole("button", { name: "Confirm import" }),
   ).toBeDisabled();
   await page
     .getByLabel("Row 5 email", { exact: true })
@@ -439,7 +439,7 @@ test("template, contact import, preview, and individual campaign queue", async (
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth),
   ).toBeLessThanOrEqual(page.viewportSize()!.width + 1);
-  await page.getByRole("button", { name: "Import Valid Contacts" }).click();
+  await page.getByRole("button", { name: "Confirm import" }).click();
   await expect(
     page.getByText("2 contacts imported. 0 rows skipped."),
   ).toBeVisible();
@@ -726,7 +726,7 @@ test("example template, focused placeholder insertion, pasted lists and mixed ro
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth),
   ).toBeLessThanOrEqual(page.viewportSize()!.width + 1);
-  await page.getByRole("button", { name: "Import Valid Contacts" }).click();
+  await page.getByRole("button", { name: "Confirm import" }).click();
   await expect(
     page.getByText("3 contacts imported. 0 rows skipped."),
   ).toBeVisible();
@@ -1555,3 +1555,113 @@ base(
     ).toBe(false);
   },
 );
+
+test("CSV import upload, review, replacement errors and confirmation", async ({
+  page,
+  userId,
+}) => {
+  expect(userId).toBeTruthy();
+  await page.goto("/contacts");
+  const card = page.locator("section", {
+    has: page.getByRole("heading", { name: "Import contacts with CSV" }),
+  });
+  const sample = await page.request.get("/sample-contacts.csv");
+  expect(sample.ok()).toBe(true);
+  expect(await sample.text()).toContain("email,name,company,role");
+  await expect(
+    card.getByRole("link", { name: "Download sample CSV" }),
+  ).toHaveAttribute("download", "");
+  const input = card.getByLabel("CSV file", { exact: true });
+  const csv =
+    "email,name,company,role\nalex@example.com,Alex,Northstar,Engineer\nalex@example.com,Alex,Northstar,Engineer\nbad,Taylor,,Designer\nsam@example.com,Sam,,Designer\njo@example.com,Jo,,Engineer\nlee@example.com,Lee,,Engineer";
+  await input.setInputFiles({
+    name: "contacts.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(csv),
+  });
+  await expect(
+    card.getByText("4 valid · 1 duplicate · 1 invalid"),
+  ).toBeVisible();
+  await expect(card.getByText("Showing rows 1–5 of 6")).toBeVisible();
+  await expect(
+    card.getByRole("button", { name: "Confirm import" }),
+  ).toBeDisabled();
+  await card
+    .getByLabel("Row 4 email", { exact: true })
+    .fill("taylor@example.com");
+  await expect(
+    card.getByText("5 valid · 1 duplicate · 0 invalid"),
+  ).toBeVisible();
+  await card.getByRole("button", { name: "Next Rows" }).click();
+  await expect(card.getByLabel("Row 7 email", { exact: true })).toHaveValue(
+    "lee@example.com",
+  );
+  await card.getByLabel("Row 7 company", { exact: true }).fill("Northstar");
+  await card.getByRole("button", { name: "Previous Rows" }).click();
+  for (const [name, buffer, message] of [
+    ["wrong.txt", Buffer.from(csv), "Choose one CSV file (.csv)."],
+    ["large.csv", Buffer.alloc(1024 * 1024 + 1), "Choose a CSV up to 1 MB."],
+    ["empty.csv", Buffer.from(""), "Your file or list is empty."],
+    [
+      "headers.csv",
+      Buffer.from("email,name,company,role"),
+      "No contact rows found.",
+    ],
+  ] as const) {
+    await input.setInputFiles({ name, mimeType: "text/csv", buffer });
+    await expect(card.getByRole("alert")).toContainText(message);
+    await expect(
+      card.getByRole("table", { name: "Editable import preview" }),
+    ).toHaveCount(0);
+  }
+  const transfer = await page.evaluateHandle(() => {
+    const data = new DataTransfer();
+    data.items.add(
+      new File(
+        [
+          "email,name,company,role\nalex@example.com,Alex,Northstar,Engineer\nsam@example.com,Sam,,Designer",
+        ],
+        "dropped.csv",
+        { type: "text/csv" },
+      ),
+    );
+    return data;
+  });
+  await card
+    .locator("div")
+    .filter({
+      has: page.getByText("Drag and drop your CSV here", { exact: true }),
+    })
+    .last()
+    .dispatchEvent("drop", { dataTransfer: transfer });
+  await transfer.dispose();
+  await expect(card.getByText("Selected file: dropped.csv")).toBeVisible();
+  await expect(
+    card.getByText("2 valid · 0 duplicate · 0 invalid"),
+  ).toBeVisible();
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate(
+      (value) => document.documentElement.setAttribute("data-theme", value),
+      theme,
+    );
+    expect(
+      (
+        await new AxeBuilder({ page })
+          .include('section[aria-labelledby="contact-import-heading"]')
+          .analyze()
+      ).violations,
+    ).toEqual([]);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth + 1,
+      ),
+    ).toBe(true);
+  }
+  await card.getByRole("button", { name: "Confirm import" }).click();
+  await expect(
+    card.getByText("2 contacts imported. 0 rows skipped."),
+  ).toBeVisible();
+  await expect(
+    card.getByRole("table", { name: "Editable import preview" }),
+  ).toHaveCount(0);
+});
