@@ -12,7 +12,6 @@ export async function requireUser() {
       email: true,
       name: true,
       preferredRoles: true,
-      linkUrl: true,
       nextSendAt: true,
       gmailAuthorized: true,
       currentAttachmentId: true,

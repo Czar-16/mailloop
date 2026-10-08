@@ -19,6 +19,11 @@ import {
 } from "@/components/template-preview";
 import { RoleChoices } from "@/components/preferences";
 
+import {
+  SuccessConfirmation,
+  useSuccessNotification,
+} from "@/components/notifications";
+
 export function useUnsavedChanges(dirty: boolean, preserveQuery = false) {
   useEffect(() => {
     if (!dirty) return;
@@ -53,7 +58,15 @@ export function useUnsavedChanges(dirty: boolean, preserveQuery = false) {
     };
   }, [dirty, preserveQuery]);
 }
-export function Feedback({ result }: { result?: ActionResult }) {
+export function Feedback({
+  result,
+  successConfirmation = false,
+}: {
+  result?: ActionResult;
+  successConfirmation?: boolean;
+}) {
+  if (successConfirmation && result?.ok)
+    return <SuccessConfirmation>{result.message}</SuccessConfirmation>;
   return (
     <p
       aria-live="polite"
@@ -124,16 +137,14 @@ export function DeleteButton({
   );
 }
 const example = {
-  subject: "Exploring {{role}} opportunities",
-  body: "Hi {{name}},\n\nI’m interested in {{role}} opportunities at {{company}}. I’d love to share how my experience could help your team.\n\nThank you for your time.",
+  subject: "Exploring {{role}} opportunities at {{company}}",
+  body: "Hi {{name}},\n\nI’m interested in {{role}} opportunities at {{company}}.\nI’d love to discuss how my experience could help your team.\n\nPortfolio: https://example.com/your-portfolio\nGitHub: https://github.com/your-username\nLinkedIn: https://www.linkedin.com/in/your-username\n\nI’ve attached my resume PDF for your review.\n\nThank you for your time.\nYour name",
 };
 export function TemplateForm({
   template,
   contacts = [],
-  linkUrl = null,
 }: {
   contacts?: PreviewContact[];
-  linkUrl?: string | null;
   template?: { id: string; name: string; subject: string; body: string };
 }) {
   const [result, setResult] = useState<ActionResult>();
@@ -141,6 +152,7 @@ export function TemplateForm({
   const [dirty, setDirty] = useState(false);
   useUnsavedChanges(dirty);
   const router = useRouter();
+  const notifySuccess = useSuccessNotification();
   const formRef = useRef<HTMLFormElement>(null);
   const [draft, setDraft] = useState({
     subject: template?.subject ?? "",
@@ -168,15 +180,18 @@ export function TemplateForm({
         className="panel space-y-4 p-5"
         onChange={() => {
           setDirty(true);
+          setResult((current) => (current?.ok ? undefined : current));
           syncDraft();
         }}
         onSubmit={(event) => {
           event.preventDefault();
           const form = new FormData(event.currentTarget);
+          setResult(undefined);
           start(async () => {
             const r = await saveTemplate(form);
             setResult(r);
             if (r.ok) {
+              notifySuccess("Template saved successfully.");
               setDirty(false);
               if (!template) {
                 formRef.current?.reset();
@@ -190,18 +205,20 @@ export function TemplateForm({
         <h2 className="section-label">
           {template ? "Edit Template" : "New Template"}
         </h2>
-        <p className="sr-only">
-          Write placeholders in templates: {"{{name}}, {{company}}, {{role}}"}.
-          Enter actual values in Contacts and Compose. {"{{link}}"} uses your
-          saved HTTPS URL in the message body.
+        <p className="text-sm leading-6 text-body">
+          {"{{name}}"} uses the contact’s name; {"{{company}}"} uses their
+          company (or empty text if missing); {"{{role}}"} uses their job role,
+          which you can override in Compose. Type a placeholder in the subject
+          or message, or click a button below to insert it at the message
+          cursor.
         </p>
         <div className="flex flex-wrap gap-2">
-          {["name", "company", "role", "link"].map((token) => (
+          {["name", "company", "role"].map((token) => (
             <Button
               key={token}
               type="button"
               variant="outline"
-              className="chip"
+              className="chip placeholder-chip"
               disabled={pending}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => {
@@ -222,6 +239,7 @@ export function TemplateForm({
                     end: field.selectionEnd,
                   };
                   setDirty(true);
+                  setResult((current) => (current?.ok ? undefined : current));
                   syncDraft();
                 }
               }}
@@ -299,7 +317,7 @@ export function TemplateForm({
             }
             name="body"
             defaultValue={template?.body}
-            rows={7}
+            rows={20}
             className="text-[13px]"
             required
             maxLength={20000}
@@ -309,11 +327,22 @@ export function TemplateForm({
           <FieldError result={result} name="body" />
           <p className="mt-2 text-xs leading-5 text-body">
             Personalize with <code>{"{{name}}"}</code>,{" "}
-            <code>{"{{company}}"}</code>, and <code>{"{{role}}"}</code>.
-            Messages are sent as plain text.
+            <code>{"{{company}}"}</code>, and <code>{"{{role}}"}</code>. Paste
+            your portfolio, GitHub, LinkedIn, or other links directly into the
+            message. You can include multiple links. Use full URLs because
+            emails are sent as plain text.
           </p>
         </div>
-        <Feedback result={result} />
+        <p className="text-xs leading-5 text-body">
+          Upload a resume PDF in Settings, then select “Attach Resume” in
+          Compose. Mentioning a PDF in the message does not attach it.
+        </p>
+        <p className="text-xs leading-5 text-body">
+          When using the example, replace the sample links and signature, and
+          either attach your resume in Compose or remove the attachment
+          sentence.
+        </p>
+        <Feedback result={result} successConfirmation />
         <div className="flex gap-2">
           <Button type="submit" disabled={pending}>
             {pending ? "Saving…" : "Save Template"}
@@ -339,6 +368,7 @@ export function TemplateForm({
                   if (field) field.value = example[key];
                 }
                 setDirty(true);
+                setResult((current) => (current?.ok ? undefined : current));
                 syncDraft();
               }}
             >
@@ -354,7 +384,6 @@ export function TemplateForm({
       </form>
       <TemplatePreview
         contacts={contacts}
-        linkUrl={linkUrl}
         subject={draft.subject}
         body={draft.body}
       />
@@ -382,6 +411,7 @@ export function ContactForm({
   const [dirty, setDirty] = useState(false);
   useUnsavedChanges(dirty);
   const router = useRouter();
+  const notifySuccess = useSuccessNotification();
   const formRef = useRef<HTMLFormElement>(null);
   useEffect(() => {
     if (!pending && result?.ok === false)
@@ -393,14 +423,19 @@ export function ContactForm({
     <form
       ref={formRef}
       className="panel space-y-4 p-6"
-      onChange={() => setDirty(true)}
+      onChange={() => {
+        setDirty(true);
+        setResult((current) => (current?.ok ? undefined : current));
+      }}
       onSubmit={(event) => {
         event.preventDefault();
         const form = new FormData(event.currentTarget);
+        setResult(undefined);
         start(async () => {
           const r = await saveContact(form);
           setResult(r);
           if (r.ok) {
+            notifySuccess("Contact saved successfully.");
             setDirty(false);
             if (!contact) {
               formRef.current?.reset();
@@ -499,9 +534,10 @@ export function ContactForm({
         onChoose={(r) => {
           setJobRole(r);
           setDirty(true);
+          setResult((current) => (current?.ok ? undefined : current));
         }}
       />
-      <Feedback result={result} />
+      <Feedback result={result} successConfirmation />
       <div className="flex gap-2">
         <Button type="submit" disabled={pending}>
           {pending ? "Saving…" : "Save Contact"}

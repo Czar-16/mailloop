@@ -28,7 +28,8 @@ export function Resume({
       <div>
         <h2 className="section-label">Resume PDF</h2>
         <p className="mt-2 text-sm leading-6 text-body">
-          One PDF, attached to every new email. Optional, up to 5 MB. Queued
+          Upload one resume PDF, up to 5 MB, then select “Attach Resume” in
+          Compose. Mentioning a PDF in the message does not attach it. Queued
           emails retain the resume you selected when sending.
         </p>
       </div>

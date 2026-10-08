@@ -417,7 +417,9 @@ test("template, contact import, preview, and individual campaign queue", async (
     .getByRole("button", { name: "Save Template", exact: true })
     .click();
   await expect(
-    page.getByText("Template saved.", { exact: true }),
+    page
+      .getByTestId("success-confirmation")
+      .filter({ hasText: "Template saved." }),
   ).toBeVisible();
   await page.goto("/contacts");
   await page
@@ -441,8 +443,13 @@ test("template, contact import, preview, and individual campaign queue", async (
   ).toBeLessThanOrEqual(page.viewportSize()!.width + 1);
   await page.getByRole("button", { name: "Confirm import" }).click();
   await expect(
-    page.getByText("2 contacts imported. 0 rows skipped."),
+    page
+      .getByTestId("success-confirmation")
+      .filter({ hasText: "2 contacts imported. 0 rows skipped." }),
   ).toBeVisible();
+  await expect(page.getByTestId("success-toast")).toContainText(
+    "Contacts imported successfully.",
+  );
   await page.goto("/compose");
   await page.getByLabel("Role to Apply to Selected").fill("Engineer");
   await page.getByRole("checkbox", { name: /Alex/ }).check();
@@ -578,6 +585,8 @@ test("invalid template keeps typed values and focuses the field error", async ({
     "true",
   );
   await expect(page.getByLabel("Message", { exact: true })).toBeFocused();
+  await expect(page.getByTestId("success-toast")).toHaveCount(0);
+  await expect(page.getByTestId("success-confirmation")).toHaveCount(0);
   await expect(page.getByLabel("Template name", { exact: true })).toHaveValue(
     "Keep my draft",
   );
@@ -586,7 +595,9 @@ test("invalid template keeps typed values and focuses the field error", async ({
     .getByRole("button", { name: "Save Template", exact: true })
     .click();
   await expect(
-    page.getByText("Template saved.", { exact: true }),
+    page
+      .getByTestId("success-confirmation")
+      .filter({ hasText: "Template saved." }),
   ).toBeVisible();
 });
 
@@ -618,7 +629,11 @@ test("setup, name suggestion manual override, account menu, and theme persistenc
     .getByRole("button", { name: "SDE Intern", exact: true })
     .click();
   await page.getByRole("button", { name: "Save Contact", exact: true }).click();
-  await expect(page.getByText("Contact saved.", { exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByTestId("success-confirmation")
+      .filter({ hasText: "Contact saved." }),
+  ).toBeVisible();
   const saved = await pool.query(
     'SELECT "preferredRoles" FROM "User" WHERE id=$1',
     [userId],
@@ -641,6 +656,8 @@ test("setup, name suggestion manual override, account menu, and theme persistenc
   await page.getByRole("button", { name: "Dark theme", exact: true }).click();
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  // Audit the final colors rather than the page entrance fade.
+  await page.emulateMedia({ reducedMotion: "reduce" });
   for (const route of [
     "contacts",
     "compose",
@@ -680,19 +697,21 @@ test("setup, name suggestion manual override, account menu, and theme persistenc
 test("example template, focused placeholder insertion, pasted lists and mixed roles with links", async ({
   page,
   userId,
-}, testInfo) => {
+}) => {
+  // A live local worker may scan this shared database. Defer only this fixture's
+  // queue so delivery remains under test control until we confirm it below.
   await pool.query(
-    'UPDATE "User" SET "preferredRoles"=$2,"linkUrl"=$3 WHERE id=$1',
+    'UPDATE "User" SET "preferredRoles"=$2,"nextSendAt"=$3 WHERE id=$1',
     [
       userId,
       ["SDE Intern", "Frontend Developer"],
-      "https://example.com/portfolio",
+      new Date(Date.now() + 3600000),
     ],
   );
   await page.goto("/templates");
   await page.getByRole("button", { name: "Use Example", exact: true }).click();
   await expect(page.getByLabel("Subject", { exact: true })).toHaveValue(
-    "Exploring {{role}} opportunities",
+    "Exploring {{role}} opportunities at {{company}}",
   );
   await page.getByLabel("Template name", { exact: true }).fill("Mixed Roles");
   await page.getByLabel("Subject", { exact: true }).fill("Opportunity for ");
@@ -705,13 +724,16 @@ test("example template, focused placeholder insertion, pasted lists and mixed ro
   );
   await page
     .getByLabel("Message", { exact: true })
-    .fill("Hi {{name}}, I’m applying for {{role}}. Link: ");
-  await page.getByRole("button", { name: "{{link}}", exact: true }).click();
+    .fill(
+      "Hi {{name}}, I’m applying for {{role}}.\n\nPortfolio: https://example.com/portfolio\nGitHub: https://github.com/user\nLinkedIn: https://linkedin.com/in/user",
+    );
   await page
     .getByRole("button", { name: "Save Template", exact: true })
     .click();
   await expect(
-    page.getByText("Template saved.", { exact: true }),
+    page
+      .getByTestId("success-confirmation")
+      .filter({ hasText: "Template saved." }),
   ).toBeVisible();
   await page.goto("/contacts");
   await page
@@ -728,7 +750,9 @@ test("example template, focused placeholder insertion, pasted lists and mixed ro
   ).toBeLessThanOrEqual(page.viewportSize()!.width + 1);
   await page.getByRole("button", { name: "Confirm import" }).click();
   await expect(
-    page.getByText("3 contacts imported. 0 rows skipped."),
+    page
+      .getByTestId("success-confirmation")
+      .filter({ hasText: "3 contacts imported. 0 rows skipped." }),
   ).toBeVisible();
   await page.goto("/compose");
   for (const name of ["Alex", "Sam", "Taylor"])
@@ -740,10 +764,7 @@ test("example template, focused placeholder insertion, pasted lists and mixed ro
     page.getByLabel("Attach Resume", { exact: false }),
   ).toBeDisabled();
   await expect(
-    page.getByRole("link", {
-      name: "https://example.com/portfolio",
-      exact: true,
-    }),
+    page.locator(".mail-preview").getByText("Portfolio:", { exact: false }),
   ).toBeVisible();
   await page
     .getByLabel("Preview recipient", { exact: true })
@@ -760,7 +781,16 @@ test("example template, focused placeholder insertion, pasted lists and mixed ro
   await expect(page).toHaveURL(/history\?campaign=/);
   await expect(
     page.getByRole("region", { name: "Campaign delivery progress" }),
-  ).toContainText("Waiting for delivery service");
+  ).toContainText("Queued · 3");
+  // Follow the user's route sequence before delivery finishes.
+  await page.getByRole("link", { name: "Compose", exact: true }).click();
+  await page.getByRole("link", { name: "History", exact: true }).click();
+  await expect(page).toHaveURL(/\/history$/);
+  const progress = page.getByRole("region", {
+    name: "Campaign delivery progress",
+  });
+  await expect(progress).toContainText("Queued · 3");
+  await expect(progress.locator(".completion-check")).toHaveCount(0);
   const sends = await pool.query(
     'SELECT s."recipientRole",s.body,c."attachmentId" FROM "Send" s JOIN "Campaign" c ON c.id=s."campaignId" WHERE c."userId"=$1',
     [userId],
@@ -774,6 +804,8 @@ test("example template, focused placeholder insertion, pasted lists and mixed ro
     sends.rows.every(
       (r) =>
         r.body.includes("https://example.com/portfolio") &&
+        r.body.includes("https://github.com/user") &&
+        r.body.includes("https://linkedin.com/in/user") &&
         r.attachmentId === null,
     ),
   ).toBe(true);
@@ -781,46 +813,43 @@ test("example template, focused placeholder insertion, pasted lists and mixed ro
     `UPDATE "Send" SET status='SENT',"deliveryState"='DONE',"sentAt"=now() WHERE "campaignId" IN (SELECT id FROM "Campaign" WHERE "userId"=$1)`,
     [userId],
   );
-  await expect(
-    page.getByRole("region", { name: "Campaign delivery progress" }),
-  ).toContainText("Batch complete. All emails sent.", { timeout: 15000 });
-  const check = page.locator(".completion-check");
-  await expect(check).toBeVisible();
-  await expect(check).toHaveCSS("width", "80px");
-  await expect(page.locator(".progress-ring .timer-value")).toHaveCount(0);
-  await expect(check.locator("path")).toHaveCSS("animation-duration", "0.45s");
-  await check.locator("path").evaluate(async (e) => {
-    await Promise.all(e.getAnimations().map((animation) => animation.finished));
+  await expect(progress.locator(".completion-check")).toBeVisible({
+    timeout: 15000,
   });
-  const animationStart = await check
-    .locator("path")
-    .evaluate((e) => e.getAnimations()[0].startTime);
+  await expect(progress).toContainText("Batch complete. All emails sent.");
+  await expect(progress).toContainText("Sent · 3");
+  await expect(progress).toContainText("Queued · 0");
+  await expect(progress.locator(".timer-value")).toHaveCount(0);
   await page.getByRole("button", { name: "Dark theme", exact: true }).click();
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  // Finish the theme's root overlay before capturing this individual panel.
-  await page.evaluate(async () => {
-    await Promise.all(
-      document
-        .getAnimations()
-        .filter((animation) =>
-          (
-            animation.effect as KeyframeEffect | null
-          )?.pseudoElement?.startsWith("::view-transition"),
-        )
-        .map((animation) => animation.finished.catch(() => {})),
-    );
-  });
-  expect(
-    await check.locator("path").evaluate((e) => e.getAnimations()[0].startTime),
-  ).toBe(animationStart);
+  await expect(progress.locator(".completion-check")).toBeVisible();
+  await page.getByLabel("Filter by status").selectOption("SENT");
+  await expect(page).toHaveURL(/status=SENT/);
+  await expect(progress.locator(".completion-check")).toBeVisible();
   await page
-    .getByRole("region", { name: "Campaign delivery progress" })
-    .screenshot({ path: testInfo.outputPath("batch-complete.png") });
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  await expect(check.locator("path")).toHaveCSS("animation-name", "none");
-  await expect(check.locator("path")).toHaveCSS("stroke-dashoffset", "0px");
+    .getByRole("button", { name: "Check Replies", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Check Replies", exact: true }),
+  ).toBeEnabled();
+  await expect(progress.locator(".completion-check")).toBeVisible();
+  await page.getByRole("link", { name: "Compose", exact: true }).click();
+  await expect(page).toHaveURL(/\/compose$/);
+  await expect(
+    page.getByRole("heading", {
+      name: "Make your next connection.",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL(/history/);
+  await expect(progress).toHaveCount(0);
+  await page.reload();
+  await expect(progress).toHaveCount(0);
   await page.goto("/compose");
   await expect(page.getByText(/Last Sent:/).first()).toBeVisible();
+  await page.getByRole("link", { name: "History", exact: true }).click();
+  await expect(page).toHaveURL(/\/history$/);
+  await expect(progress).toHaveCount(0);
 });
 
 test("progress distinguishes uncertain outcomes and includes the user queue in estimates", async ({
@@ -856,7 +885,7 @@ test("progress distinguishes uncertain outcomes and includes the user queue in e
     [otherCampaign, "QUEUED", "READY"],
   ])
     await pool.query(
-      'INSERT INTO "Send" (id,"campaignId","contactId",status,"deliveryState","dispatchedAt") VALUES ($1,$2,$3,$4::"SendStatus",$5::"DeliveryState",now())',
+      `INSERT INTO "Send" (id,"campaignId","contactId",status,"deliveryState","dispatchedAt","recipientName","recipientEmail") VALUES ($1,$2,$3,$4::"SendStatus",$5::"DeliveryState",now(),'Alex','alex@example.test')`,
       [randomUUID(), id, contact, status, state],
     );
   await page.clock.install({ time: new Date() });
@@ -921,6 +950,19 @@ test("progress distinguishes uncertain outcomes and includes the user queue in e
   expect(await readSeconds()).toBe(before - 4);
   await page.clock.resume();
   await page.getByRole("button", { name: "Dark theme", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  // Audit settled theme colors, rather than intermediate navigation transitions.
+  await page.evaluate(async () => {
+    await Promise.all(
+      document
+        .getAnimations()
+        .filter(
+          (animation) =>
+            animation.effect?.getComputedTiming().iterations !== Infinity,
+        )
+        .map((animation) => animation.finished.catch(() => {})),
+    );
+  });
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.emulateMedia({ reducedMotion: "reduce" });
   expect(
@@ -929,10 +971,61 @@ test("progress distinguishes uncertain outcomes and includes the user queue in e
       .first()
       .evaluate((e) => getComputedStyle(e).transitionDuration),
   ).toBe("0s");
+  // An absent/unknown campaign parameter must not conceal the user's queue.
   await page.goto(`/history?campaign=${randomUUID()}`);
+  await expect(card).toContainText("Queued · 2");
+  await expect(card).toContainText("Sent · 1");
+  await expect(card).toContainText("Failed · 1");
+  await expect(card).toContainText("Needs review · 1");
+  await page.getByRole("link", { name: "Compose", exact: true }).click();
+  await page.getByRole("link", { name: "History", exact: true }).click();
+  await expect(page).toHaveURL(/\/history$/);
+  await expect(card).toContainText("Queued · 2");
+  await expect(card.locator(".countdown-arc")).toBeVisible();
+  await page.reload();
+  await expect(card).toContainText("Queued · 2");
+
+  const search = page.getByRole("searchbox", { name: "Search history" });
+  const statusFilter = page.getByLabel("Filter by status");
+  await search.fill("alex");
+  await statusFilter.selectOption("QUEUED");
+  await expect(page).toHaveURL(/q=alex&status=QUEUED/);
+  await expect(page.locator("tbody tr")).toHaveCount(2);
+  await expect(card).toContainText("Sent · 1");
   await expect(
-    page.getByRole("region", { name: "Campaign delivery progress" }),
+    page.getByRole("button", { name: "Filter", exact: true }),
   ).toHaveCount(0);
+  await statusFilter.selectOption("SENT");
+  await expect(page.locator("tbody tr")).toHaveCount(1);
+  await expect(search).toHaveValue("alex");
+  await search.fill("no-match");
+  await search.press("Enter");
+  await expect(page).toHaveURL(/q=no-match&status=SENT/);
+  await expect(page.locator("tbody tr")).toHaveCount(0);
+  await expect(card).toContainText("Queued · 2");
+
+  // Finishing one campaign must not remove its counts from the observed queue.
+  await pool.query(
+    `UPDATE "Send" SET status='SENT',"deliveryState"='DONE',"sentAt"=now() WHERE "campaignId"=$1`,
+    [otherCampaign],
+  );
+  await expect(card).toContainText("Queued · 1", { timeout: 15000 });
+  await expect(card).toContainText("Sent · 2");
+  await expect(card).toContainText("Delivery needs review");
+  await expect(card.locator(".completion-check")).toHaveCount(0);
+
+  await pool.query(
+    `UPDATE "Send" SET status='SENT',"deliveryState"='DONE',"sentAt"=now() WHERE "campaignId" IN (SELECT id FROM "Campaign" WHERE "userId"=$1)`,
+    [userId],
+  );
+  await expect(card.locator(".completion-check")).toBeVisible({
+    timeout: 15000,
+  });
+  await expect(card).toContainText("Sent · 5");
+  await page.reload();
+  await expect(card).toHaveCount(0);
+  await page.goto("/history");
+  await expect(card).toHaveCount(0);
 });
 
 test("batch countdown survives polls, individual sends and an expired estimate", async ({
@@ -1020,25 +1113,8 @@ test("batch countdown survives polls, individual sends and an expired estimate",
   await expect(card).toContainText("with failures", { timeout: 15000 });
   await expect(card.locator(".completion-check")).toHaveCount(0);
   await expect(arc).toHaveCount(0);
-  // Confirm successful completion without relying on a live sending service.
-  await pool.query(
-    'UPDATE "Send" SET status=\'SENT\',"deliveryState"=\'DONE\',"sentAt"=now() WHERE id=$1',
-    [sendIds[1]],
-  );
   await page.reload();
-  const check = card.locator(".completion-check");
-  await expect(check).toBeVisible();
-  await expect(check).toHaveCSS("width", "80px");
-  await expect(card.locator(".timer-value")).toHaveCount(0);
-  await expect(
-    card.locator(".progress-ring span").filter({ hasText: /^Done$/ }),
-  ).toHaveCSS("font-size", "12px");
-  await check.locator("path").evaluate(async (element) => {
-    await Promise.all(
-      element.getAnimations().map((animation) => animation.finished),
-    );
-  });
-  await card.screenshot({ path: testInfo.outputPath("batch-complete.png") });
+  await expect(card).toHaveCount(0);
 });
 
 test("compose bulk selection respects role filters, prior sends and the batch cap", async ({
@@ -1150,26 +1226,13 @@ test("attachment defaults, example replacement warning, and batch role filters",
     page.getByRole("link", { name: "resume.pdf", exact: true }),
   ).toBeVisible();
   await page.goto("/compose");
-  await expect(page.getByLabel("Attach Resume", { exact: true })).toBeChecked();
-  await page.getByLabel("Attach Resume", { exact: true }).uncheck();
+  await expect(
+    page.getByLabel("Attach Resume", { exact: true }),
+  ).not.toBeChecked();
   await expect(
     page.getByText("No PDF attachment", { exact: true }),
   ).toBeVisible();
   await expect(page.getByText("resume.pdf", { exact: true })).toBeVisible();
-  await page.goto("/settings");
-  await page
-    .getByLabel("URL (optional HTTPS link)")
-    .fill("https://example.com/portfolio");
-  await page
-    .getByRole("button", { name: "Save Preferences", exact: true })
-    .click();
-  await expect(
-    page.getByText("Preferences saved.", { exact: true }),
-  ).toBeVisible();
-  await page.goto("/compose");
-  await expect(
-    page.getByLabel("Attach Resume", { exact: true }),
-  ).not.toBeChecked();
   await page.getByLabel("Attach Resume", { exact: true }).check();
   await expect(
     page.getByText("resume.pdf", { exact: true }).last(),
@@ -1188,7 +1251,9 @@ test("attachment defaults, example replacement warning, and batch role filters",
     .getByRole("button", { name: "Save Template", exact: true })
     .click();
   await expect(
-    page.getByText("Template saved.", { exact: true }),
+    page
+      .getByTestId("success-confirmation")
+      .filter({ hasText: "Template saved." }),
   ).toBeVisible();
   await pool.query(
     'INSERT INTO "Contact" (id,"userId",name,email,"jobRole") VALUES ($1,$2,$3,$4,$5)',
@@ -1271,14 +1336,10 @@ test("redesign: populated pages in both themes, live recipient preview, cursor i
   const templateId = randomUUID(),
     contactId = randomUUID(),
     campaignId = randomUUID();
-  await pool.query(
-    'UPDATE "User" SET "preferredRoles"=$2,"linkUrl"=$3 WHERE id=$1',
-    [
-      userId,
-      ["SDE Intern", "Backend Developer"],
-      "https://example.test/resume",
-    ],
-  );
+  await pool.query('UPDATE "User" SET "preferredRoles"=$2 WHERE id=$1', [
+    userId,
+    ["SDE Intern", "Backend Developer"],
+  ]);
   await pool.query(
     'INSERT INTO "Template" (id,"userId",name,subject,body) VALUES ($1,$2,$3,$4,$5)',
     [
@@ -1286,7 +1347,7 @@ test("redesign: populated pages in both themes, live recipient preview, cursor i
       userId,
       "Backend template",
       "Exploring {{role}} opportunities at {{company}}",
-      "Hi {{name}},\n\nI’m interested in {{role}} opportunities at {{company}}.\n\nLink: {{link}}\n\nThank you for your time.",
+      "Hi {{name}},\n\nI’m interested in {{role}} opportunities at {{company}}.\n\nLink: https://example.test/resume\n\nThank you for your time.",
     ],
   );
   await pool.query(
@@ -1556,6 +1617,138 @@ base(
   },
 );
 
+test("inline links: complete example, live full message, wrapping and legacy send guard", async ({
+  page,
+  userId,
+}) => {
+  await pool.query('UPDATE "User" SET "preferredRoles"=$2 WHERE id=$1', [
+    userId,
+    ["Engineer"],
+  ]);
+  const contactId = randomUUID();
+  await pool.query(
+    'INSERT INTO "Contact" (id,"userId",name,email,company,"jobRole") VALUES ($1,$2,$3,$4,$5,$6)',
+    [contactId, userId, "Alex Smith", "alex@example.test", "Acme", "Engineer"],
+  );
+  await page.goto("/templates");
+  await expect(
+    page.getByRole("button", { name: "{{link}}", exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Use Example", exact: true }).click();
+  const example =
+    "Hi {{name}},\n\nI’m interested in {{role}} opportunities at {{company}}.\nI’d love to discuss how my experience could help your team.\n\nPortfolio: https://example.com/your-portfolio\nGitHub: https://github.com/your-username\nLinkedIn: https://www.linkedin.com/in/your-username\n\nI’ve attached my resume PDF for your review.\n\nThank you for your time.\nYour name";
+  const message = page.getByLabel("Message", { exact: true });
+  await expect(message).toHaveValue(example);
+  await expect(page.getByLabel("Subject", { exact: true })).toHaveValue(
+    "Exploring {{role}} opportunities at {{company}}",
+  );
+  await expect(
+    page.getByText("Mentioning a PDF in the message does not attach it.", {
+      exact: false,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("When using the example, replace", { exact: false }),
+  ).toBeVisible();
+  const preview = page.getByRole("complementary", {
+    name: "Live email preview",
+  });
+  await expect(preview).toContainText(
+    "I’d love to discuss how my experience could help your team.",
+  );
+  await message.fill("Custom draft");
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await page.getByRole("button", { name: "Use Example", exact: true }).click();
+  await expect(message).toHaveValue("Custom draft");
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Use Example", exact: true }).click();
+  await expect(message).toHaveValue(example);
+  const longUrl = `https://example.test/${"portfolio".repeat(70)}?a=1&b=2`;
+  const body = `Hi {{name}},\n\n${longUrl}\nhttps://github.com/user\nhttps://linkedin.com/in/user\n\n${"A complete paragraph.\n".repeat(35)}End of message.`;
+  const personalized = body.replace("{{name}}", "Alex Smith");
+  await message.fill(body);
+  const templateBody = preview.locator(".mail-preview > div").last();
+  expect(await templateBody.textContent()).toBe(personalized);
+  await expect(templateBody).toContainText("End of message.");
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(page.viewportSize()!.width + 1);
+  expect(
+    await templateBody.evaluate(
+      (element) => element.scrollWidth <= element.clientWidth + 1,
+    ),
+  ).toBe(true);
+  await page.getByLabel("Template name", { exact: true }).fill("Full message");
+  await page
+    .getByRole("button", { name: "Save Template", exact: true })
+    .click();
+  await expect(
+    page
+      .getByTestId("success-confirmation")
+      .filter({ hasText: "Template saved." }),
+  ).toBeVisible();
+  const template = (
+    await pool.query(
+      'SELECT id,body FROM "Template" WHERE "userId"=$1 AND name=$2',
+      [userId, "Full message"],
+    )
+  ).rows[0];
+  expect(template.body).toBe(body);
+  await page.goto("/compose");
+  await page
+    .getByLabel("Choose a template", { exact: true })
+    .selectOption(template.id);
+  await page.getByRole("checkbox", { name: /Alex Smith/ }).check();
+  const composeBody = page.locator(".mail-preview p.whitespace-pre-wrap");
+  expect(await composeBody.textContent()).toBe(personalized);
+  expect(
+    await composeBody.evaluate(
+      (element) => element.scrollWidth <= element.clientWidth + 1,
+    ),
+  ).toBe(true);
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(page.viewportSize()!.width + 1);
+  await expect(
+    page.getByText("Mentioning a PDF in the message does not attach it.", {
+      exact: false,
+    }),
+  ).toBeVisible();
+  await pool.query(
+    'UPDATE "Template" SET body=$2 WHERE id=$1 AND "userId"=$3',
+    [template.id, "Legacy {{ link }}", userId],
+  );
+  await page.reload();
+  await page
+    .getByLabel("Choose a template", { exact: true })
+    .selectOption(template.id);
+  await page.getByRole("checkbox", { name: /Alex Smith/ }).check();
+  await expect(page.locator(".mail-preview")).toContainText(
+    "Legacy {{ link }}",
+  );
+  await expect(page.locator(".mail-preview").getByRole("alert")).toHaveText(
+    "Replace {{link}} with a URL directly in your message.",
+  );
+  await page
+    .getByRole("button", { name: "Send to 1 recipient", exact: true })
+    .click();
+  await expect(page.locator("main").getByRole("alert").last()).toHaveText(
+    "Replace {{link}} with a URL directly in your message.",
+  );
+  expect(
+    (await pool.query('SELECT id FROM "Campaign" WHERE "userId"=$1', [userId]))
+      .rows,
+  ).toEqual([]);
+  await page.goto(`/templates?edit=${template.id}`);
+  await expect(
+    page
+      .getByRole("complementary", { name: "Live email preview" })
+      .getByRole("status"),
+  ).toHaveText("Replace {{link}} with a URL directly in your message.");
+  await page.goto("/settings");
+  await expect(page.locator('input[name="linkUrl"]')).toHaveCount(0);
+});
+
 test("CSV import upload, review, replacement errors and confirmation", async ({
   page,
   userId,
@@ -1659,9 +1852,173 @@ test("CSV import upload, review, replacement errors and confirmation", async ({
   }
   await card.getByRole("button", { name: "Confirm import" }).click();
   await expect(
-    card.getByText("2 contacts imported. 0 rows skipped."),
+    card
+      .getByTestId("success-confirmation")
+      .filter({ hasText: "2 contacts imported. 0 rows skipped." }),
   ).toBeVisible();
+  await expect(page.getByTestId("success-toast")).toContainText(
+    "CSV imported successfully.",
+  );
   await expect(
     card.getByRole("table", { name: "Editable import preview" }),
   ).toHaveCount(0);
+  await expect(
+    card.getByRole("button", { name: "Choose file", exact: true }),
+  ).toBeEnabled();
+  await input.setInputFiles({
+    name: "replacement.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("wrong"),
+  });
+  await expect(card.getByTestId("success-confirmation")).toHaveCount(0);
+  await expect(card.getByRole("alert")).toContainText("Choose one CSV file");
 });
+
+for (const kind of ["Contact", "Template"] as const) {
+  test(`${kind} confirmations: refresh, editing, repeated saves and toast lifetime`, async ({
+    page,
+    userId,
+  }, testInfo) => {
+    await pool.query('UPDATE "User" SET "preferredRoles"=$2 WHERE id=$1', [
+      userId,
+      ["Engineer"],
+    ]);
+    const route = kind === "Contact" ? "contacts" : "templates";
+    await page.goto(`/${route}`);
+    if (kind === "Contact") {
+      await page.getByLabel("Email", { exact: true }).fill("alex@example.test");
+      await page.getByLabel("Name", { exact: true }).fill("Alex");
+      await page.getByLabel("Job Role", { exact: true }).fill("Engineer");
+    } else {
+      await page
+        .getByLabel("Template name", { exact: true })
+        .fill("Introduction");
+      await page.getByLabel("Subject", { exact: true }).fill("Hello");
+      await page.getByLabel("Message", { exact: true }).fill("Hi {{name}}");
+    }
+    const save = page.getByRole("button", {
+      name: `Save ${kind}`,
+      exact: true,
+    });
+    const toast = page.getByTestId("success-toast");
+    const inline = page.getByTestId("success-confirmation");
+    await save.click();
+    await expect(toast).toContainText(`${kind} saved successfully.`);
+    await expect(inline).toHaveText(`${kind} saved.`);
+    // A refreshed server list proves that the notification survived the refresh.
+    const saved = await pool.query(
+      `SELECT id FROM "${kind}" WHERE "userId"=$1`,
+      [userId],
+    );
+    const edit = page.locator(`a[href="/${route}?edit=${saved.rows[0].id}"]`);
+    await expect(edit).toBeVisible();
+    await expect(toast).toBeVisible();
+    await expect(
+      page
+        .getByRole("status")
+        .filter({ hasText: `${kind} saved successfully.` }),
+    ).toHaveCount(1);
+    expect(await inline.getAttribute("aria-live")).toBeNull();
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(
+        (value) => document.documentElement.setAttribute("data-theme", value),
+        theme,
+      );
+      expect(
+        (
+          await new AxeBuilder({ page })
+            .include('[data-testid="success-toast"]')
+            .include('[data-testid="success-confirmation"]')
+            .analyze()
+        ).violations,
+      ).toEqual([]);
+      const box = await toast.boundingBox();
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.y).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(
+        page.viewportSize()!.width,
+      );
+      expect(box!.y + box!.height).toBeLessThanOrEqual(
+        page.viewportSize()!.height,
+      );
+      await toast.screenshot({
+        path: testInfo.outputPath(`success-${theme}.png`),
+      });
+    }
+    await page.getByRole("button", { name: "Dismiss notification" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(toast).toHaveCount(0);
+    await expect(inline).toBeVisible();
+    await page
+      .getByLabel(kind === "Contact" ? "Email" : "Template name", {
+        exact: true,
+      })
+      .fill("draft");
+    await expect(inline).toHaveCount(0);
+    if (kind === "Contact") {
+      await page.getByLabel("Email", { exact: true }).fill("alex@example.test");
+      await page.getByLabel("Name", { exact: true }).fill("Duplicate");
+      await page.getByLabel("Job Role", { exact: true }).fill("Engineer");
+      await save.click();
+      await expect(
+        page.locator("form").filter({ has: save }).getByRole("alert"),
+      ).toBeVisible();
+      await expect(toast).toHaveCount(0);
+      await expect(inline).toHaveCount(0);
+    }
+    // Discard the new draft and open the saved record.
+    page.once("dialog", (dialog) => dialog.accept());
+    await edit.click();
+    await expect(
+      page.getByRole("heading", { name: `Edit ${kind}`, exact: true }),
+    ).toBeVisible();
+    await page
+      .getByLabel(kind === "Contact" ? "Name" : "Template name", {
+        exact: true,
+      })
+      .fill("Updated");
+    await page.clock.install();
+    await save.click();
+    await expect(toast).toBeVisible();
+    await expect(inline).toBeVisible();
+    await expect(save).toBeEnabled();
+    expect(
+      (
+        await pool.query(
+          `SELECT name FROM "${kind}" WHERE "userId"=$1 AND id=$2`,
+          [userId, saved.rows[0].id],
+        )
+      ).rows[0].name,
+    ).toBe("Updated");
+    await page.mouse.move(0, 0);
+    await page.clock.runFor(4500);
+    await save.click();
+    await expect(save).toBeEnabled();
+    await expect(toast).toBeVisible();
+    await page.mouse.move(0, 0);
+    await page.clock.runFor(2000);
+    await expect(toast).toBeVisible();
+    // Hover and keyboard focus independently pause the remaining six seconds.
+    await toast.hover();
+    await page.clock.runFor(7000);
+    await expect(toast).toBeVisible();
+    await page.getByRole("button", { name: "Dismiss notification" }).focus();
+    await page.mouse.move(0, 0);
+    await page.clock.runFor(7000);
+    await expect(toast).toBeVisible();
+    await save.focus();
+    await page.clock.runFor(6001);
+    await expect(toast).toHaveCount(0);
+    await expect(inline).toBeVisible();
+    if (kind === "Contact") {
+      await page
+        .locator("form")
+        .filter({ has: save })
+        .getByRole("button", { name: "Engineer", exact: true })
+        .click();
+    } else {
+      await page.getByRole("button", { name: "{{name}}", exact: true }).click();
+    }
+    await expect(inline).toHaveCount(0);
+  });
+}

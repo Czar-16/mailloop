@@ -72,3 +72,83 @@ describe.runIf(enabled)("generic link migration", () => {
     }
   });
 });
+
+describe.runIf(enabled)("inline template links migration", () => {
+  it("converts every owner’s active and archived bodies, preserves missing URLs and snapshots, and drops the column", async () => {
+    const client = new Client({ connectionString: process.env.DATABASE_URL });
+    await client.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(`
+        CREATE TEMP TABLE "User" (id uuid, "linkUrl" text);
+        CREATE TEMP TABLE "Template" ("userId" uuid, "body" text, "archivedAt" timestamptz);
+        CREATE TEMP TABLE "Send" ("body" text);
+      `);
+      const owners = [1, 2, 3, 4].map(
+        (n) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
+      );
+      const firstUrl = "https://example.test/$&?a=1&b=2\\path";
+      const secondUrl = "https://github.com/second";
+      for (const [index, url] of [firstUrl, secondUrl, null, ""].entries()) {
+        await client.query('INSERT INTO "User" VALUES ($1,$2)', [
+          owners[index],
+          url,
+        ]);
+        await client.query(
+          'INSERT INTO "Template" VALUES ($1,$2,NULL), ($1,$3,NOW())',
+          [
+            owners[index],
+            "Hi {{name}}\n{{link}} {{ link }} {{\nlink\t}}",
+            "{{link}}\nArchived",
+          ],
+        );
+      }
+      const snapshots = [
+        "Queued: https://original.test",
+        "Historical {{link}}",
+      ];
+      await client.query('INSERT INTO "Send" VALUES ($1), ($2)', snapshots);
+      const migration = await readFile(
+        new URL(
+          "../prisma/migrations/20261008020000_inline_template_links/migration.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      );
+      await client.query(
+        migration.replace(/^BEGIN;\s*/, "").replace(/COMMIT;\s*$/, ""),
+      );
+      for (const [index, url] of [firstUrl, secondUrl, null, ""].entries()) {
+        const result = await client.query(
+          'SELECT body, "archivedAt" IS NOT NULL AS archived FROM "Template" WHERE "userId"=$1 ORDER BY "archivedAt" NULLS FIRST',
+          [owners[index]],
+        );
+        expect(result.rows).toEqual([
+          {
+            body: url
+              ? `Hi {{name}}\n${url} ${url} ${url}`
+              : "Hi {{name}}\n{{link}} {{ link }} {{\nlink\t}}",
+            archived: false,
+          },
+          {
+            body: url ? `${url}\nArchived` : "{{link}}\nArchived",
+            archived: true,
+          },
+        ]);
+      }
+      expect((await client.query('SELECT body FROM "Send"')).rows).toEqual(
+        snapshots.map((body) => ({ body })),
+      );
+      expect(
+        (
+          await client.query(
+            `SELECT attname FROM pg_attribute WHERE attrelid = 'pg_temp."User"'::regclass AND attname = 'linkUrl' AND NOT attisdropped`,
+          )
+        ).rows,
+      ).toEqual([]);
+    } finally {
+      await client.query("ROLLBACK");
+      await client.end();
+    }
+  });
+});

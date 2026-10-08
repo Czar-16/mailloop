@@ -1,16 +1,16 @@
 import { Suspense } from "react";
 import { WorkspaceSkeleton } from "@/components/workspace-skeleton";
+import { readCampaignProgress } from "@/lib/campaign-progress";
 import { CampaignProgress } from "@/components/campaign-progress";
 import { requireUser } from "@/lib/session";
 import { db } from "@/lib/db";
 import { quotaWhere } from "@/lib/campaigns";
 import { PageHeading, EmptyState, Status } from "@/components/common";
+import { HistoryFilters } from "@/components/history-filters";
 import { HistoryControls } from "@/components/history-controls";
 import { DateTime } from "@/components/date-time";
 import { Pagination } from "@/components/pagination";
 import { pageNumber } from "@/lib/params";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 export const metadata = { title: "History" };
 async function HistoryContent({
   searchParams,
@@ -81,69 +81,8 @@ async function HistoryContent({
         where: { campaign: { userId: user.id }, status: "QUEUED" },
       }),
     ]);
-  const focused = params.campaign
-    ? await db.campaign.findFirst({
-        where: { id: params.campaign, userId: user.id },
-        select: {
-          id: true,
-          createdAt: true,
-          sends: {
-            select: {
-              status: true,
-              deliveryState: true,
-              dispatchedAt: true,
-              sentAt: true,
-              attemptedAt: true,
-            },
-          },
-        },
-      })
-    : null;
-  const outstanding = focused
-    ? await db.send.count({
-        where: {
-          campaign: { userId: user.id },
-          status: "QUEUED",
-          deliveryState: { not: "UNCERTAIN" },
-        },
-      })
-    : 0;
-  const progress = focused
-    ? {
-        id: focused.id,
-        observedAt: new Date().toISOString(),
-        createdAt: focused.createdAt.toISOString(),
-        finishedAt: focused.sends.every(
-          (s) => s.status !== "QUEUED" && s.deliveryState !== "UNCERTAIN",
-        )
-          ? (focused.sends
-              .map((s) => s.sentAt ?? s.attemptedAt ?? focused.createdAt)
-              .sort((a, b) => b.getTime() - a.getTime())[0]
-              ?.toISOString() ?? focused.createdAt.toISOString())
-          : null,
-        queued: focused.sends.filter(
-          (s) => s.status === "QUEUED" && s.deliveryState !== "UNCERTAIN",
-        ).length,
-        sent: focused.sends.filter(
-          (s) =>
-            ["SENT", "REPLIED"].includes(s.status) &&
-            s.deliveryState !== "UNCERTAIN",
-        ).length,
-        failed: focused.sends.filter(
-          (s) => s.status === "FAILED" && s.deliveryState !== "UNCERTAIN",
-        ).length,
-        review: focused.sends.filter((s) => s.deliveryState === "UNCERTAIN")
-          .length,
-        pendingDispatch: focused.sends.some(
-          (s) =>
-            s.status === "QUEUED" &&
-            !s.dispatchedAt &&
-            s.deliveryState !== "UNCERTAIN",
-        ),
-        outstanding,
-        nextSendAt: user.nextSendAt?.toISOString() ?? null,
-      }
-    : null;
+  // Initial visits show only the live queue; completion belongs to client visit state.
+  const progress = await readCampaignProgress(user);
   return (
     <>
       <PageHeading
@@ -186,44 +125,8 @@ async function HistoryContent({
           </div>
         ))}
       </div>
-      {progress && <CampaignProgress data={progress} />}
-      <form
-        method="get"
-        action="/history"
-        className="mb-4 flex flex-wrap gap-3"
-      >
-        {focused && <input type="hidden" name="campaign" value={focused.id} />}
-        <label htmlFor="history-search" className="sr-only">
-          Search history
-        </label>
-        <Input
-          id="history-search"
-          name="q"
-          defaultValue={q}
-          className="min-w-44 flex-1"
-          autoComplete="off"
-          placeholder="Search recipients or companies…"
-        />
-        <label htmlFor="history-status" className="sr-only">
-          Filter by status
-        </label>
-        <select
-          id="history-status"
-          name="status"
-          defaultValue={status ?? ""}
-          className="text-sm"
-        >
-          <option value="">All Statuses</option>
-          {["QUEUED", "SENT", "FAILED", "REPLIED"].map((s) => (
-            <option key={s} value={s}>
-              {s.charAt(0) + s.slice(1).toLowerCase()}
-            </option>
-          ))}
-        </select>
-        <Button type="submit" variant="outline">
-          Filter
-        </Button>
-      </form>
+      <CampaignProgress data={progress} />
+      <HistoryFilters q={q} status={status ?? ""} campaign={params.campaign} />
       {!sends.length ? (
         <EmptyState
           title="Your introductions start here"
@@ -298,7 +201,7 @@ async function HistoryContent({
         path="/history"
         page={page}
         total={total}
-        query={{ q, status: status ?? "", campaign: focused?.id ?? "" }}
+        query={{ q, status: status ?? "", campaign: params.campaign ?? "" }}
       />
     </>
   );

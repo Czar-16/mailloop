@@ -1,7 +1,11 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
-import { campaignSchema, renderTemplate } from "@/lib/validation";
+import {
+  campaignSchema,
+  renderTemplate,
+  templateSchema,
+} from "@/lib/validation";
 import { AppError } from "@/lib/errors";
 import type { Prisma } from "@/generated/prisma/client";
 
@@ -44,10 +48,7 @@ export async function createCampaign(userId: string, input: unknown) {
         where: { id: data.templateId, userId, archivedAt: null },
       });
       if (!template) throw new AppError("Choose an available template.");
-      if (/{{\s*link\s*}}/.test(template.body) && !user.linkUrl)
-        throw new AppError(
-          "Save an HTTPS URL in Settings for this template.",
-        );
+      templateSchema.parse(template);
       const contacts = await tx.contact.findMany({
         where: { id: { in: data.recipientIds }, userId, archivedAt: null },
       });
@@ -127,7 +128,6 @@ export async function createCampaign(userId: string, input: unknown) {
           name: c.name,
           company: c.company,
           role,
-          link: user.linkUrl,
         };
 
         const subject = renderTemplate(template.subject, values);

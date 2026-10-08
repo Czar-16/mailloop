@@ -7,7 +7,6 @@ import {
   contactSchema,
   templateSchema,
   preferredRolesSchema,
-  linkUrlSchema,
 } from "@/lib/validation";
 import { parseContacts, validateImportRows } from "@/lib/imports";
 import { AppError, type ActionResult } from "@/lib/errors";
@@ -201,12 +200,11 @@ export async function savePreferences(input: unknown) {
     const data = z
       .object({
         preferredRoles: preferredRolesSchema,
-        linkUrl: linkUrlSchema,
       })
       .parse(input);
     await db.user.update({
       where: { id: user.id },
-      data: { ...data, linkUrl: data.linkUrl || null },
+      data,
     });
     revalidatePath("/", "layout");
     return { ok: true, message: "Preferences saved." };

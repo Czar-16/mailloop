@@ -8,6 +8,7 @@ import { RoleSetup } from "@/components/preferences";
 import { ThemeControl } from "@/components/theme";
 import { PageTransition } from "@/components/page-transition";
 import { WorkspaceLoading } from "@/components/workspace-loading";
+import { NotificationProvider } from "@/components/notifications";
 export const dynamic = "force-dynamic";
 export const metadata = { robots: { index: false, follow: false } };
 async function AuthenticatedLayout({
@@ -17,7 +18,7 @@ async function AuthenticatedLayout({
 }) {
   const user = await requireUser();
   return (
-    <>
+    <NotificationProvider>
       <header className="">
         <div className="page-container flex flex-wrap items-center justify-between gap-3 pt-[18px]">
           <Wordmark />
@@ -39,16 +40,14 @@ async function AuthenticatedLayout({
         </div>
       </header>
       <main id="main-content" className="page-container pt-[26px] pb-[60px]">
-        {!user.preferredRoles.length && (
-          <RoleSetup linkUrl={user.linkUrl} />
-        )}
+        {!user.preferredRoles.length && <RoleSetup />}
         <PageTransition>{children}</PageTransition>
       </main>
       <footer className="page-container border-t border-border py-6 text-xs text-body">
         <span translate="no">Mailloop</span> · Thoughtful outreach, one
         introduction at a time.
       </footer>
-    </>
+    </NotificationProvider>
   );
 }
 

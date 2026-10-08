@@ -19,30 +19,28 @@ export const templateSchema = z
       .min(1)
       .max(250)
       .refine((v) => !/[\r\n]/.test(v), "Subject must be one line."),
-    body: z.string().trim().min(1).max(20000),
+    body: z
+      .string()
+      .trim()
+      .min(1)
+      .max(20000)
+      .transform((value) => value.replace(/\r\n/g, "\n")),
   })
   .superRefine((v, ctx) => {
     for (const field of ["subject", "body"] as const) {
       const tokens = [...v[field].matchAll(/{{\s*([^{}]+?)\s*}}/g)];
       if (
         tokens.some(
-          (t) =>
-            ![
-              "name",
-              "company",
-              "role",
-              ...(field === "body" ? ["link"] : []),
-            ].includes(t[1].trim()),
+          (t) => !["name", "company", "role"].includes(t[1].trim()),
         ) ||
-        /{{|}}/.test(
-          v[field].replace(/{{\s*(name|company|role|link)\s*}}/g, ""),
-        )
+        /{{|}}/.test(v[field].replace(/{{\s*(name|company|role)\s*}}/g, ""))
       ) {
         ctx.addIssue({
           code: "custom",
           path: [field],
-          message:
-            "Use {{name}}, {{company}}, {{role}}, and {{link}} (body only).",
+          message: /{{\s*link\s*}}/.test(v[field])
+            ? "Replace {{link}} with a URL directly in your message."
+            : "Use {{name}}, {{company}}, and {{role}}.",
         });
       }
     }
@@ -67,11 +65,10 @@ export function renderTemplate(
     name: string;
     company?: string | null;
     role: string;
-    link?: string | null;
   },
 ) {
   return text.replace(
-    /{{\s*(name|company|role|link)\s*}}/g,
+    /{{\s*(name|company|role)\s*}}/g,
     (_, key: keyof typeof values) => values[key] ?? "",
   );
 }
@@ -94,16 +91,3 @@ export const preferredRolesSchema = z
     (v) => new Set(v.map((r) => r.toLowerCase())).size === v.length,
     "Choose unique roles.",
   );
-export const linkUrlSchema = z
-  .string()
-  .trim()
-  .max(2048)
-  .refine((value) => {
-    if (!value) return true;
-    try {
-      const url = new URL(value);
-      return url.protocol === "https:" && !url.username && !url.password;
-    } catch {
-      return false;
-    }
-  }, "Enter an HTTPS URL.");

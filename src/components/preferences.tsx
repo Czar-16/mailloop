@@ -41,29 +41,24 @@ export function RoleChoices({
 }
 export function Preferences({
   roles,
-  linkUrl,
   setup = false,
 }: {
   roles: string[];
-  linkUrl: string | null;
   setup?: boolean;
 }) {
   const [values, setValues] = useState(roles);
   const [custom, setCustom] = useState("");
-  const [url, setUrl] = useState(linkUrl ?? "");
   const [result, setResult] = useState<ActionResult>();
   const [dirty, setDirty] = useState(false);
   const [pending, start] = useTransition();
   const router = useRouter();
   const customInput = useRef<HTMLInputElement>(null);
-  const urlInput = useRef<HTMLInputElement>(null);
   const roleError = Object.entries(result?.fieldErrors ?? {}).find(([key]) =>
     key.startsWith("preferredRoles"),
   )?.[1];
   useEffect(() => {
     if (!pending && result?.ok === false) {
-      if (result.fieldErrors?.linkUrl) urlInput.current?.focus();
-      else if (roleError) customInput.current?.focus();
+      if (roleError) customInput.current?.focus();
     }
   }, [result, pending, roleError]);
   useUnsavedChanges(dirty);
@@ -115,7 +110,6 @@ export function Preferences({
           start(async () => {
             const r = await savePreferences({
               preferredRoles: values,
-              linkUrl: url,
             });
             setResult(r);
             if (r.ok) {
@@ -152,37 +146,6 @@ export function Preferences({
         >
           Add Role
         </Button>
-        {!setup && (
-          <label className="block border-t border-border pt-4 text-sm">
-            <span className="section-label mb-2 block">Link</span>
-            URL (optional HTTPS link)
-            <Input
-              ref={urlInput}
-              aria-invalid={!!result?.fieldErrors?.linkUrl}
-              aria-describedby={
-                result?.fieldErrors?.linkUrl
-                  ? "preference-url-error"
-                  : undefined
-              }
-              name="linkUrl"
-              type="url"
-              value={url}
-              maxLength={2048}
-              autoComplete="off"
-              disabled={pending}
-              onChange={(e) => {
-                setUrl(e.target.value);
-                setDirty(true);
-              }}
-              placeholder="https://example.com/…"
-            />
-          </label>
-        )}
-        {result?.fieldErrors?.linkUrl && (
-          <p id="preference-url-error" className="text-xs text-error-deep">
-            {result.fieldErrors.linkUrl}
-          </p>
-        )}
         <Feedback result={result} />
         <Button disabled={pending}>
           {pending ? "Saving…" : "Save Preferences"}
@@ -192,9 +155,7 @@ export function Preferences({
   );
 }
 
-export function RoleSetup({ linkUrl }: { linkUrl: string | null }) {
+export function RoleSetup() {
   const pathname = usePathname();
-  return pathname === "/settings" ? null : (
-    <Preferences roles={[]} linkUrl={linkUrl} setup />
-  );
+  return pathname === "/settings" ? null : <Preferences roles={[]} setup />;
 }

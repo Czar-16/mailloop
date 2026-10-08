@@ -139,13 +139,11 @@ describe.runIf(enabled)(
           jobRole: "Frontend Developer",
         },
       });
-      await db.user.update({
-        where: { id: userId },
-        data: { linkUrl: "https://example.com/first" },
-      });
       await db.template.updateMany({
         where: { id: templateId, userId },
-        data: { body: "Hi {{name}}: {{role}}. {{link}}" },
+        data: {
+          body: "Hi {{name}}: {{role}}.\n\nhttps://example.com/first?a=1&b=2\nhttps://github.com/user\nhttps://linkedin.com/in/user\n\nEnd.",
+        },
       });
       const pdf = Buffer.from("%PDF-1.4\n%%EOF");
       await storeLocalResume(
@@ -169,11 +167,15 @@ describe.runIf(enabled)(
         "SDE Intern",
       ]);
       expect(
-        saved.sends.every((s) => s.body.includes("https://example.com/first")),
+        saved.sends.every(
+          (s) =>
+            s.body ===
+            `Hi ${s.recipientName}: ${s.recipientRole}.\n\nhttps://example.com/first?a=1&b=2\nhttps://github.com/user\nhttps://linkedin.com/in/user\n\nEnd.`,
+        ),
       ).toBe(true);
-      await db.user.update({
-        where: { id: userId },
-        data: { linkUrl: "https://example.com/second" },
+      await db.template.updateMany({
+        where: { id: templateId, userId },
+        data: { body: "https://example.com/second" },
       });
       await db.contact.updateMany({
         where: { id: second.id, userId },
@@ -193,7 +195,7 @@ describe.runIf(enabled)(
       ).toString();
       expect(mime).not.toContain("application/pdf");
     });
-    it("requires legacy roles, saved links, and an owned current PDF", async () => {
+    it("requires legacy roles, resolved placeholders, and an owned current PDF", async () => {
       await expect(
         createCampaign(userId, request([contactId], { recipientRoles: {} })),
       ).rejects.toThrow("job role");
@@ -204,12 +206,26 @@ describe.runIf(enabled)(
         where: { id: templateId, userId },
         data: { body: "{{link}}" },
       });
-      await expect(createCampaign(userId, request())).rejects.toThrow(
-        "URL",
-      );
-      await db.user.update({
-        where: { id: userId },
-        data: { linkUrl: "https://example.com/resume" },
+      for (const body of [
+        "{{link}}",
+        "{{ link }}",
+        "{{\nlink\t}}",
+        "{{unknown}}",
+      ]) {
+        await db.template.updateMany({
+          where: { id: templateId, userId },
+          data: { body },
+        });
+        await expect(createCampaign(userId, request())).rejects.toThrow(
+          body.includes("link")
+            ? "Replace {{link}} with a URL directly in your message."
+            : "Use {{name}}",
+        );
+        expect(await db.campaign.count({ where: { userId } })).toBe(0);
+      }
+      await db.template.updateMany({
+        where: { id: templateId, userId },
+        data: { body: "https://example.com/resume" },
       });
       await expect(
         createCampaign(

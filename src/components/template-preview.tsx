@@ -13,7 +13,6 @@ export type PreviewPart = { text: string; kind: "text" | "filled" | "invalid" };
 export function previewParts(
   text: string,
   values: Record<string, string | null>,
-  body: boolean,
 ) {
   const parts: PreviewPart[] = [];
   const errors: string[] = [];
@@ -25,8 +24,8 @@ export function previewParts(
     const token = match[1]?.trim();
     const valid =
       token !== undefined &&
-      Object.hasOwn(values, token) &&
-      (body || token !== "link");
+      ["name", "company", "role"].includes(token) &&
+      Object.hasOwn(values, token);
     parts.push({
       text: valid ? (values[token!] ?? "") : match[0],
       kind: valid ? "filled" : "invalid",
@@ -35,8 +34,8 @@ export function previewParts(
       errors.push(
         token === undefined || token.includes("{{")
           ? "A {{ }} bracket is not closed."
-          : token === "link" && !body
-            ? "{{link}} is allowed in the message body only."
+          : token === "link"
+            ? "Replace {{link}} with a URL directly in your message."
             : `Unknown placeholder: ${match[0]}.`,
       );
     cursor = match.index + match[0].length;
@@ -58,12 +57,10 @@ function Highlighted({ parts }: { parts: PreviewPart[] }) {
 }
 export function TemplatePreview({
   contacts,
-  linkUrl,
   subject,
   body,
 }: {
   contacts: PreviewContact[];
-  linkUrl: string | null;
   subject: string;
   body: string;
 }) {
@@ -75,16 +72,14 @@ export function TemplatePreview({
         name: recipient.name,
         company: recipient.company,
         role: recipient.jobRole,
-        link: linkUrl,
       }
     : {
         name: "Recipient name",
         company: "Company",
         role: "Job role",
-        link: linkUrl,
       };
-  const renderedSubject = previewParts(subject, values, false);
-  const renderedBody = previewParts(body, values, true);
+  const renderedSubject = previewParts(subject, values);
+  const renderedBody = previewParts(body, values);
   const errors = [
     ...new Set([...renderedSubject.errors, ...renderedBody.errors]),
   ];
@@ -92,7 +87,7 @@ export function TemplatePreview({
     ...new Set(
       [
         ...subject.matchAll(/{{\s*(name|company|role)\s*}}/g),
-        ...body.matchAll(/{{\s*(name|company|role|link)\s*}}/g),
+        ...body.matchAll(/{{\s*(name|company|role)\s*}}/g),
       ]
         .filter((match) => !values[match[1] as keyof typeof values])
         .map((match) => match[1]),
@@ -100,7 +95,7 @@ export function TemplatePreview({
   ];
   return (
     <aside
-      className="panel space-y-3 p-5 min-[861px]:sticky min-[861px]:top-3"
+      className="panel min-w-0 space-y-3 p-5 min-[861px]:sticky min-[861px]:top-3"
       aria-label="Live email preview"
     >
       <div className="flex items-center justify-between">

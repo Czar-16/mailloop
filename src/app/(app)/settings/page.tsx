@@ -19,7 +19,7 @@ async function SettingsContent() {
   const connected = user.gmailAuthorized && !!user.encryptedRefreshToken;
   return (
     <>
-      <Preferences roles={user.preferredRoles} linkUrl={user.linkUrl} />
+      <Preferences roles={user.preferredRoles} />
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
         <section className="panel space-y-5 p-6">
           <h2 className="section-label">Account · Gmail connection</h2>

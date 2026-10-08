@@ -8,7 +8,6 @@ import {
   validatePdf,
   MAX_PDF_BYTES,
   preferredRolesSchema,
-  linkUrlSchema,
 } from "@/lib/validation";
 import { parseContacts, suggestName, validateImportRows } from "@/lib/imports";
 
@@ -118,7 +117,7 @@ describe("outreach preferences and email lists", () => {
     expect(fixed[3].state).toBe("valid");
     expect(parseContacts("alex@example.com")[0].state).toBe("invalid");
   });
-  it("validates preference count, case-insensitive uniqueness, and secure URLs", () => {
+  it("validates preference count, case-insensitive uniqueness", () => {
     for (const roles of [
       [],
       [""],
@@ -129,39 +128,46 @@ describe("outreach preferences and email lists", () => {
     expect(preferredRolesSchema.parse([" SDE Intern "])).toEqual([
       "SDE Intern",
     ]);
-    for (const url of [
-      "http://example.com",
-      "javascript:alert(1)",
-      "https://user:pass@example.com",
-    ])
-      expect(linkUrlSchema.safeParse(url).success).toBe(false);
-    expect(linkUrlSchema.parse("https://example.com/portfolio")).toContain(
-      "https:",
-    );
-    expect(linkUrlSchema.parse("")).toBe("");
   });
-  it("allows links only in template bodies and renders literally", () => {
+  it("rejects legacy links and preserves multiple literal URLs", () => {
+    const body =
+      "Hi {{name}},\n\nPortfolio: https://example.com/$&?a=1&b=2\nGitHub: https://github.com/user\nLinkedIn: https://linkedin.com/in/user\n\nThank you.";
     expect(
-      templateSchema.safeParse({
-        name: "Portfolio",
+      templateSchema.parse({ name: "Links", subject: "Hi", body }).body,
+    ).toBe(body);
+    expect(
+      templateSchema.parse({
+        name: "Links",
         subject: "Hi",
-        body: "{{link}}",
-      }).success,
-    ).toBe(true);
-    expect(
-      templateSchema.safeParse({
-        name: "Portfolio",
-        subject: "{{link}}",
-        body: "Hi",
-      }).success,
-    ).toBe(false);
-    expect(
-      renderTemplate("{{link}}", {
-        name: "A",
-        role: "Engineer",
-        link: "https://example.com/$&",
-      }),
-    ).toBe("https://example.com/$&");
+        body: body.replace(/\n/g, "\r\n"),
+      }).body,
+    ).toBe(body);
+    expect(renderTemplate(body, { name: "Alex", role: "Engineer" })).toBe(
+      body.replace("{{name}}", "Alex"),
+    );
+    for (const token of [
+      "{{link}}",
+      "{{ link }}",
+      "{{\nlink\t}}",
+      "{{unknown}}",
+    ]) {
+      for (const field of ["subject", "body"]) {
+        const parsed = templateSchema.safeParse({
+          name: "Legacy",
+          subject: "Hi",
+          body: "Hi",
+          [field]: token,
+        });
+        expect(parsed.success).toBe(false);
+        if (!parsed.success && token.includes("link"))
+          expect(parsed.error.issues.map((issue) => issue.message)).toContain(
+            "Replace {{link}} with a URL directly in your message.",
+          );
+      }
+      expect(renderTemplate(token, { name: "Alex", role: "Engineer" })).toBe(
+        token,
+      );
+    }
   });
 });
 

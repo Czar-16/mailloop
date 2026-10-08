@@ -47,11 +47,11 @@ The interface uses soft layered surfaces, thin borders, gentle shadows, and a vi
 
 - Page opens with a monospace eyebrow, a large title, and one line of supporting copy.
 - Layout is two columns (message and shortlist on the left, preview and send panel on the right), stacking on narrow screens.
-- Template placeholders are taught in the Role field hint: `{{name}}`, `{{company}}`, `{{role}}`, `{{link}}`. Saved roles appear as dashed chips. Role overrides apply only to the batch and never modify contacts.
+- Template placeholders are taught in the Role field hint: `{{name}}`, `{{company}}`, `{{role}}`. Saved roles appear as dashed chips. Role overrides apply only to the batch and never modify contacts.
 - Shortlist rows are rounded surface cards with a checkbox, name, company, email, role, and a warning tag such as "Previously contacted" for skipped people.
 - Select all adds eligible contacts matching the current role filter, skips previously contacted and blocked people, and respects the 15-contact selection limit. Clear selection clears the current filter's selection while keeping other selections.
-- The preview card shows the email the selected recipient will receive: a subject header and body. Resume attachment is an independent choice from the link, which appears only when the template contains `{{link}}`.
-- The resume controls use consistent spacing: attachment checkbox, a separate file-icon line with a truncated PDF name, then a small link status badge. The send panel shows value-driven progress bars for selected recipients (out of 15) and quota usage (out of 500); fills transition only when values change.
+- The preview card shows the email the selected recipient will receive: a subject header and body. The complete body preserves paragraphs, line breaks, and every URL pasted into the template; long URLs wrap without clipping. Resume attachment defaults off and is selected explicitly.
+- The resume controls use consistent spacing: attachment checkbox, a separate file-icon line with a truncated PDF name, then visible guidance to upload a PDF in Settings and select Attach Resume in Compose. Mentioning a PDF in the message does not attach it. The send panel shows value-driven progress bars for selected recipients (out of 15) and quota usage (out of 500); fills transition only when values change.
 
 ## Templates
 
@@ -59,7 +59,9 @@ The interface uses soft layered surfaces, thin borders, gentle shadows, and a vi
 - The preview has a green pulsing "LIVE" indicator and a "Preview as" selector so the user can check different recipients.
 - Placeholders that resolve use a bright cyan highlight: #a5f3fc with #164e63 text in light mode, #155e75 with #cffafe text in dark mode. Unknown placeholders such as a misspelled `{{nmae}}` are highlighted in Error color with a dashed outline.
 - A hint line under the preview reports the state in words: a green check when everything is valid, or a red warning naming the unknown placeholder or an unclosed `{{ }}` bracket.
-- Insert chips (`{{name}}`, `{{company}}`, `{{role}}`, `{{link}}`) insert at the cursor position in the message field.
+- Insert chips (`{{name}}`, `{{company}}`, `{{role}}`) insert at the cursor position in the message field. Visible guidance explains their contact values and Compose role overrides.
+- Paste multiple full URLs directly into the message because delivery is plain text. The complete example populates subject and message, including sample portfolio, GitHub, and LinkedIn URLs and a signature to replace. Attach the resume explicitly or remove the example’s attachment sentence.
+- Unconverted legacy `{{link}}` placeholders stay visible, with the error “Replace {{link}} with a URL directly in your message.” Invalid placeholders block saving and sending.
 
 ## Send progress and status
 

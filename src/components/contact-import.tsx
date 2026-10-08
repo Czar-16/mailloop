@@ -13,6 +13,7 @@ import { importContacts } from "@/lib/actions";
 import { Feedback, useUnsavedChanges } from "@/components/forms";
 import { RoleChoices } from "@/components/preferences";
 import type { ActionResult } from "@/lib/errors";
+import { useSuccessNotification } from "@/components/notifications";
 const PREVIEW_SIZE = 5;
 export function ContactImport({
   existingEmails,
@@ -36,6 +37,7 @@ export function ContactImport({
   const duplicateCount = rows.filter((r) => r.state === "duplicate").length;
   const invalidCount = rows.filter((r) => r.state === "invalid").length;
   const router = useRouter();
+  const notifySuccess = useSuccessNotification();
   useUnsavedChanges(!!text && !result?.ok);
   function preview(value: string) {
     try {
@@ -113,6 +115,7 @@ export function ContactImport({
   }
   function bulk(value: string) {
     setRole(value);
+    setResult((current) => (current?.ok ? undefined : current));
     setRows(
       validateImportRows(
         rows.map((r) => ({ ...r, jobRole: value, error: undefined })),
@@ -413,11 +416,17 @@ export function ContactImport({
             disabled={busy || invalidCount > 0 || validCount === 0}
             onClick={() =>
               start(async () => {
+                setResult(undefined);
                 const r = await importContacts(
                   rows.filter((row) => row.state !== "duplicate"),
                 );
                 setResult(r);
                 if (r.ok) {
+                  notifySuccess(
+                    filename
+                      ? "CSV imported successfully."
+                      : "Contacts imported successfully.",
+                  );
                   setText("");
                   setRows([]);
                   setFilename("");
@@ -430,7 +439,7 @@ export function ContactImport({
           </Button>
         </>
       )}
-      <Feedback result={result} />
+      <Feedback result={result} successConfirmation />
     </section>
   );
 }

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Send, Paperclip, ArrowRight, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { renderTemplate } from "@/lib/validation";
+import { templateSchema, renderTemplate } from "@/lib/validation";
 import { submitCampaign } from "@/lib/actions";
 import { Feedback, useUnsavedChanges } from "@/components/forms";
 import { ProgressRing, estimateSeconds } from "@/components/progress-ring";
@@ -29,7 +29,6 @@ export function Compose({
   resume,
   connected,
   roles,
-  linkUrl,
 }: {
   templates: { id: string; name: string; subject: string; body: string }[];
   contacts: ComposeContact[];
@@ -37,7 +36,6 @@ export function Compose({
   resume: string | null;
   connected: boolean;
   roles: string[];
-  linkUrl: string | null;
 }) {
   const [templateId, setTemplateId] = useState("");
   const [selected, setSelected] = useState<ComposeContact[]>([]);
@@ -46,7 +44,7 @@ export function Compose({
   const [recipientRoles, setRecipientRoles] = useState<Record<string, string>>(
     {},
   );
-  const [attachResume, setAttachResume] = useState(!!resume && !linkUrl);
+  const [attachResume, setAttachResume] = useState(false);
   const getRole = (c: ComposeContact) =>
     recipientRoles[c.id] ?? c.jobRole ?? "";
 
@@ -61,6 +59,9 @@ export function Compose({
     if (!pending && result?.fieldErrors?.role) roleInput.current?.focus();
   }, [result, pending]);
   const template = templates.find((t) => t.id === templateId);
+  const templateValidation = template
+    ? templateSchema.safeParse(template)
+    : null;
   const preview = selected.find((c) => c.id === previewId) ?? selected[0];
   const included = selected.filter(
     (c) => !c.blocked && (!c.previouslySent || resendIds.includes(c.id)),
@@ -161,8 +162,8 @@ export function Compose({
             )}
             <p className="mt-2 text-xs text-body">
               Enter actual values here. Templates use{" "}
-              {"{{name}}, {{company}}, {{role}}, and {{link}}"}. Each recipient
-              keeps their own role; overrides apply only to this batch.
+              {"{{name}}, {{company}}, and {{role}}"}. Each recipient keeps
+              their own role; overrides apply only to this batch.
             </p>
             <RoleChoices
               roles={roles}
@@ -418,7 +419,6 @@ export function Compose({
                   name: preview.name,
                   company: preview.company,
                   role: getRole(preview),
-                  link: linkUrl,
                 })}
               </h2>
               <p className="min-h-40 whitespace-pre-wrap break-words">
@@ -426,25 +426,15 @@ export function Compose({
                   name: preview.name,
                   company: preview.company,
                   role: getRole(preview),
-                  link: linkUrl,
-                })
-                  .split(linkUrl || "\u0000")
-                  .map((part, i) => (
-                    <span key={i}>
-                      {i > 0 && linkUrl && (
-                        <a
-                          href={linkUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-link"
-                        >
-                          {linkUrl}
-                        </a>
-                      )}
-                      {part}
-                    </span>
-                  ))}
+                })}
               </p>
+              {templateValidation?.success === false && (
+                <p role="alert" className="text-xs text-error-deep">
+                  {templateValidation.error.issues
+                    .map((issue) => issue.message)
+                    .join(" ")}
+                </p>
+              )}
               {preview.previouslySent && !resendIds.includes(preview.id) && (
                 <p className="text-xs text-warning">
                   This recipient will be skipped unless you allow a resend.
@@ -477,14 +467,10 @@ export function Compose({
                 {resume ?? "No PDF uploaded"}
               </span>
             </p>
-            <span className="inline-block max-w-full break-words rounded-full bg-[var(--accent-soft)] px-3 py-1 text-xs text-body">
-              Link:{" "}
-              {/\{\{\s*link\s*\}\}/.test(template?.body ?? "")
-                ? linkUrl
-                  ? "included"
-                  : "missing — save URL in Settings"
-                : "not in this template"}
-            </span>
+            <p className="text-xs leading-5 text-body">
+              Upload a resume PDF in Settings, then select “Attach Resume” here.
+              Mentioning a PDF in the message does not attach it.
+            </p>
           </div>
           <div className="pt-3">
             <p className="flex items-center gap-2 break-all text-xs text-body">
@@ -583,10 +569,11 @@ export function Compose({
                 });
                 return;
               }
-              if (/{{\s*link\s*}}/.test(template.body) && !linkUrl) {
+              const validation = templateSchema.safeParse(template);
+              if (!validation.success) {
                 setResult({
                   ok: false,
-                  message: "Save a URL in Settings before using this template.",
+                  message: validation.error.issues[0].message,
                 });
                 return;
               }

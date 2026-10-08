@@ -5,14 +5,12 @@ const values = {
   name: "Alex Smith",
   company: null,
   role: "Engineer",
-  link: "https://example.test/resume",
 };
 describe("template preview mirrors send substitutions", () => {
   it("fills full names, whitespace, repeated tokens, and absent optional values", () => {
     const rendered = previewParts(
       "Hi {{ name }}, {{company}}: {{role}} / {{role}}",
       values,
-      true,
     );
     expect(rendered.parts.map((part) => part.text).join("")).toBe(
       "Hi Alex Smith, : Engineer / Engineer",
@@ -21,7 +19,7 @@ describe("template preview mirrors send substitutions", () => {
   });
   it("flags unknown, empty, unclosed and stray brackets", () => {
     for (const text of ["{{nmae}}", "{{}}", "{{name", "}}", "{{{{name}}"]) {
-      const rendered = previewParts(text, values, true);
+      const rendered = previewParts(text, values);
       expect(rendered.errors.length, text).toBeGreaterThan(0);
       expect(
         rendered.parts.some((part) => part.kind === "invalid"),
@@ -29,19 +27,17 @@ describe("template preview mirrors send substitutions", () => {
       ).toBe(true);
     }
   });
-  it("allows the link only in the body and keeps markup as plain text", () => {
-    expect(previewParts("{{link}}", values, false).errors[0]).toContain(
-      "body only",
-    );
-    expect(previewParts("{{link}}", values, true).parts[0].text).toBe(
-      values.link,
-    );
+  it("flags legacy links and keeps markup as plain text", () => {
+    for (const token of ["{{link}}", "{{ link }}", "{{\nlink\t}}"]) {
+      const preview = previewParts(token, values);
+      expect(preview.parts[0]).toEqual({ text: token, kind: "invalid" });
+      expect(preview.errors).toEqual([
+        "Replace {{link}} with a URL directly in your message.",
+      ]);
+    }
     expect(
-      previewParts(
-        "{{name}}",
-        { ...values, name: "<script>alert(1)</script>" },
-        true,
-      ).parts[0].text,
+      previewParts("{{name}}", { ...values, name: "<script>alert(1)</script>" })
+        .parts[0].text,
     ).toBe("<script>alert(1)</script>");
   });
 });

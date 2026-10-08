@@ -36,6 +36,8 @@ import {
   savePreferences,
 } from "@/lib/actions";
 
+import { getCampaignProgress } from "@/lib/campaign-progress-actions";
+
 const enabled = process.env.MAILLOOP_DB_TESTS === "1";
 if (
   enabled &&
@@ -100,25 +102,89 @@ describe.runIf(enabled)("authenticated database-backed actions", () => {
     await db.$disconnect();
   });
 
-  it("persists preferences for the current user and rejects invalid roles and URLs", async () => {
+  it("retains observed campaign totals through completion and scopes progress to its owner", async () => {
+    const first = await db.campaign.create({
+      data: {
+        userId,
+        templateId,
+        status: "QUEUED",
+        sends: { create: { contactId } },
+      },
+    });
+    const second = await db.campaign.create({
+      data: {
+        userId,
+        templateId,
+        status: "QUEUED",
+        sends: { create: { contactId } },
+      },
+    });
+    const otherTemplate = await db.template.create({
+      data: { userId: otherId, ...templateFields },
+    });
+    const otherContact = await db.contact.create({
+      data: { userId: otherId, name: "Other", email: "other@example.test" },
+    });
+    const foreign = await db.campaign.create({
+      data: {
+        userId: otherId,
+        templateId: otherTemplate.id,
+        status: "QUEUED",
+        sends: { create: { contactId: otherContact.id } },
+      },
+    });
+    expect(await getCampaignProgress([foreign.id])).toMatchObject({
+      queued: 2,
+      sent: 0,
+    });
+    await db.send.updateMany({
+      where: { campaignId: first.id, campaign: { userId } },
+      data: { status: "SENT", deliveryState: "DONE", sentAt: new Date() },
+    });
+    expect(
+      await getCampaignProgress([first.id, second.id, foreign.id]),
+    ).toMatchObject({ queued: 1, sent: 1, finishedAt: null });
+    await db.send.updateMany({
+      where: { campaignId: second.id, campaign: { userId } },
+      data: { status: "SENT", deliveryState: "DONE", sentAt: new Date() },
+    });
+    const completed = await getCampaignProgress([
+      first.id,
+      second.id,
+      foreign.id,
+    ]);
+    expect(completed).toMatchObject({
+      queued: 0,
+      sent: 2,
+      failed: 0,
+      review: 0,
+      finishedAt: expect.any(String),
+    });
+    expect(completed?.id.split(":")).toEqual(
+      expect.arrayContaining([first.id, second.id]),
+    );
+    expect(completed?.id).not.toContain(foreign.id);
+    expect(await getCampaignProgress([])).toBeNull();
+    expect(await getCampaignProgress([foreign.id])).toBeNull();
+    await expect(getCampaignProgress(["invalid-id"])).rejects.toThrow();
+  });
+
+  it("persists preferences for the current user and rejects invalid roles", async () => {
     expect(
       await savePreferences({
         preferredRoles: ["SDE Intern", "Frontend Developer"],
-        linkUrl: "https://example.com/resume",
       }),
     ).toMatchObject({ ok: true });
     expect(await db.user.findUnique({ where: { id: userId } })).toMatchObject({
       preferredRoles: ["SDE Intern", "Frontend Developer"],
-      linkUrl: "https://example.com/resume",
     });
     expect(await db.user.findUnique({ where: { id: otherId } })).toMatchObject({
       preferredRoles: [],
-      linkUrl: null,
     });
     for (const input of [
-      { preferredRoles: [], linkUrl: "" },
-      { preferredRoles: ["Engineer", "engineer"], linkUrl: "" },
-      { preferredRoles: ["Engineer"], linkUrl: "http://example.com" },
+      { preferredRoles: [] },
+      { preferredRoles: ["Engineer", "engineer"] },
+      { preferredRoles: Array(6).fill("Engineer") },
     ])
       expect(await savePreferences(input)).toMatchObject({ ok: false });
   });
@@ -140,7 +206,8 @@ describe.runIf(enabled)("authenticated database-backed actions", () => {
       () => importContacts("name,email,company\nNew,new@example.test,Acme"),
       () => submitCampaign({}),
       () => refreshReplies(),
-      () => savePreferences({ preferredRoles: ["Engineer"], linkUrl: "" }),
+      () => getCampaignProgress([]),
+      () => savePreferences({ preferredRoles: ["Engineer"] }),
     ];
     for (const call of calls) {
       await expect(call()).rejects.toThrow("Authentication required");
