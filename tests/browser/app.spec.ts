@@ -666,6 +666,10 @@ test("setup, name suggestion manual override, account menu, and theme persistenc
     "settings",
   ]) {
     await page.goto(`/${route}`);
+    await expect(page.locator("main h1")).toBeVisible();
+    await expect(page.locator('[role="status"][aria-busy="true"]')).toHaveCount(
+      0,
+    );
     expect(
       (await new AxeBuilder({ page }).analyze()).violations,
       route,
@@ -1755,8 +1759,9 @@ test("CSV import upload, review, replacement errors and confirmation", async ({
 }) => {
   expect(userId).toBeTruthy();
   await page.goto("/contacts");
-  const card = page.locator("section", {
-    has: page.getByRole("heading", { name: "Import contacts with CSV" }),
+  const card = page.getByRole("region", {
+    name: "Import contacts with CSV",
+    exact: true,
   });
   const sample = await page.request.get("/sample-contacts.csv");
   expect(sample.ok()).toBe(true);
@@ -1837,6 +1842,13 @@ test("CSV import upload, review, replacement errors and confirmation", async ({
       (value) => document.documentElement.setAttribute("data-theme", value),
       theme,
     );
+    await card.evaluate(async (element) => {
+      await Promise.all(
+        element
+          .getAnimations({ subtree: true })
+          .map((animation) => animation.finished),
+      );
+    });
     expect(
       (
         await new AxeBuilder({ page })
@@ -1957,7 +1969,7 @@ for (const kind of ["Contact", "Template"] as const) {
     await expect(inline).toHaveCount(0);
     if (kind === "Contact") {
       await page.getByLabel("Email", { exact: true }).fill("alex@example.test");
-      await page.getByLabel("Name", { exact: true }).fill("Duplicate");
+      await page.getByLabel("Name", { exact: true }).fill("   ");
       await page.getByLabel("Job Role", { exact: true }).fill("Engineer");
       await save.click();
       await expect(
