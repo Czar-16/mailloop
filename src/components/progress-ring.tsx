@@ -1,4 +1,84 @@
-import { useId } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { batchCountdownProgress } from "@/lib/progress";
+
+type Countdown = { startAt: number; endAt: number; observedAt: number };
+const countdownCircumference = 2 * Math.PI * 59;
+
+function CountdownArc({ startAt, endAt, observedAt }: Countdown) {
+  const circle = useRef<SVGCircleElement>(null);
+  const [initialOffset] = useState(
+    () =>
+      countdownCircumference *
+      (1 - batchCountdownProgress(startAt, endAt, observedAt)),
+  );
+  useEffect(() => {
+    const element = circle.current;
+    if (!element) return;
+    const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let frame = 0;
+    let interval: ReturnType<typeof setInterval> | undefined;
+    let from = Number(element.getAttribute("stroke-dashoffset"));
+    let transitionStart = performance.now();
+    const draw = (immediate = false) => {
+      const target =
+        countdownCircumference *
+        (1 - batchCountdownProgress(startAt, endAt, Date.now()));
+      const fraction =
+        immediate || motion.matches
+          ? 1
+          : Math.min(1, (performance.now() - transitionStart) / 400);
+      const eased = 1 - (1 - fraction) ** 3;
+      element.setAttribute(
+        "stroke-dashoffset",
+        String(from + (target - from) * eased),
+      );
+    };
+    const animate = () => {
+      draw();
+      if (Date.now() < endAt || performance.now() - transitionStart < 400) {
+        frame = requestAnimationFrame(animate);
+      }
+    };
+    const synchronize = () => {
+      cancelAnimationFrame(frame);
+      clearInterval(interval);
+      if (document.visibilityState !== "visible") return;
+      // Catch up immediately after a hidden tab or a motion preference change.
+      draw(true);
+      from = Number(element.getAttribute("stroke-dashoffset"));
+      transitionStart = performance.now();
+      if (motion.matches) interval = setInterval(() => draw(true), 1000);
+      else frame = requestAnimationFrame(animate);
+    };
+    if (document.visibilityState === "visible") {
+      if (motion.matches) synchronize();
+      else frame = requestAnimationFrame(animate);
+    }
+    document.addEventListener("visibilitychange", synchronize);
+    motion.addEventListener("change", synchronize);
+    return () => {
+      cancelAnimationFrame(frame);
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", synchronize);
+      motion.removeEventListener("change", synchronize);
+    };
+  }, [startAt, endAt]);
+  return (
+    <circle
+      ref={circle}
+      className="countdown-arc"
+      cx="85"
+      cy="85"
+      r="59"
+      fill="none"
+      stroke="var(--queued)"
+      strokeWidth="3"
+      strokeLinecap="butt"
+      strokeDasharray={countdownCircumference}
+      strokeDashoffset={initialOffset}
+    />
+  );
+}
 export function estimateSeconds(
   queued: number,
   nextSendAt: string | null = null,
@@ -16,7 +96,7 @@ export function ProgressRing({
   review = 0,
   seconds,
   draft = false,
-  countdownProgress,
+  countdown,
 }: {
   sent: number;
   queued: number;
@@ -24,7 +104,7 @@ export function ProgressRing({
   review?: number;
   seconds: number;
   draft?: boolean;
-  countdownProgress?: number;
+  countdown?: Countdown;
 }) {
   const gradientId = useId();
   const segments = [
@@ -37,11 +117,15 @@ export function ProgressRing({
   ];
   const total = segments.reduce((sum, segment) => sum + segment.count, 0);
   const idle = draft && total === 0;
+  const complete =
+    !draft && sent > 0 && queued === 0 && failed === 0 && review === 0;
   const circumference = 2 * Math.PI * 70;
   const nonempty = segments.filter((segment) => segment.count > 0).length;
   let offset = 0;
   const center = queued
-    ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`
+    ? !draft && seconds === 0
+      ? "Sending"
+      : `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`
     : review
       ? "Review"
       : failed
@@ -54,6 +138,9 @@ export function ProgressRing({
       className="flex flex-wrap items-center gap-[22px]"
       aria-label={`Estimated send progress: ${sent} sent, ${queued} ${draft ? "selected" : "queued"}, ${failed} failed, ${review} need review`}
     >
+      <span className="sr-only" role="status">
+        {complete ? "Batch complete. All emails sent." : ""}
+      </span>
       <div className="progress-ring relative size-[170px]">
         <svg
           width="170"
@@ -98,35 +185,54 @@ export function ProgressRing({
               />
             );
           })}
-          {queued > 0 && countdownProgress !== undefined && (
-            <circle
-              className="countdown-arc"
-              cx="85"
-              cy="85"
-              r="59"
-              fill="none"
-              stroke="var(--queued)"
-              strokeWidth="3"
-              strokeLinecap="round"
-              strokeDasharray={2 * Math.PI * 59}
-              strokeDashoffset={2 * Math.PI * 59 * (1 - countdownProgress)}
-            />
-          )}
+          {queued > 0 && countdown && <CountdownArc {...countdown} />}
         </svg>
         <div className="absolute inset-0 mx-auto grid w-[110px] content-center text-center">
-          <b className="font-mono text-[30px] tracking-[-.04em] tabular-nums">
-            {center}
-          </b>
-          <span className="text-[10px] uppercase tracking-wide text-body">
-            {queued
-              ? "est. left"
-              : review
-                ? "needs review"
-                : failed
-                  ? "with failures"
-                  : sent
-                    ? "all sent"
-                    : "est. time left"}
+          {complete && (
+            <svg
+              className="completion-check mx-auto mb-1 size-20 text-success"
+              viewBox="0 0 40 40"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                className="completion-check-path"
+                d="M8 21L16 29L32 12"
+                stroke="currentColor"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                pathLength="1"
+              />
+            </svg>
+          )}
+          {!complete && (
+            <b
+              className={`timer-value font-mono ${center === "Sending" ? "text-[18px]" : "text-[30px]"} tracking-[-.04em] tabular-nums`}
+            >
+              {center}
+            </b>
+          )}
+          <span
+            className={
+              complete
+                ? "text-[12px] font-extrabold uppercase tracking-[.16em] text-foreground"
+                : "text-[10px] uppercase tracking-wide text-body"
+            }
+          >
+            {complete
+              ? "Done"
+              : queued
+                ? !draft && seconds === 0
+                  ? "Please be patient"
+                  : "est. left"
+                : review
+                  ? "needs review"
+                  : failed
+                    ? "with failures"
+                    : sent
+                      ? "all sent"
+                      : "est. time left"}
           </span>
         </div>
       </div>

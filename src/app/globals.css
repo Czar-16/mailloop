@@ -13,6 +13,7 @@
   --accent2: #b05cff;
   --accent-soft: #efeaff;
   --success: #16a34a;
+  --replied: #9333ea;
   --queued: #d99a00;
   --error: #e5484d;
   --shadow: 0 8px 30px rgba(80, 60, 160, 0.08);
@@ -21,6 +22,11 @@
   --status-success-text: color-mix(
     in srgb,
     var(--success) 65%,
+    var(--foreground)
+  );
+  --status-replied-text: color-mix(
+    in srgb,
+    var(--replied) 65%,
     var(--foreground)
   );
   --status-warning-text: color-mix(
@@ -67,6 +73,7 @@
   --accent2: #d070ff;
   --accent-soft: #221c45;
   --success: #34d399;
+  --replied: #c084fc;
   --queued: #fbbf24;
   --error: #fb7185;
   --shadow: 0 8px 40px rgba(0, 0, 0, 0.45);
@@ -504,8 +511,24 @@ main section {
   font-weight: 600;
 }
 .status-sent {
-  color: var(--status-success-text);
-  background: color-mix(in srgb, var(--success) 15%, transparent);
+  color: #166534;
+  background: color-mix(in srgb, #22c55e 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #16a34a 24%, transparent);
+}
+[data-theme="dark"] .status-sent {
+  color: #4ade80;
+  background: color-mix(in srgb, #22c55e 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #22c55e 24%, transparent);
+}
+.status-replied {
+  color: #6b21a8;
+  background: color-mix(in srgb, #a855f7 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #9333ea 24%, transparent);
+}
+[data-theme="dark"] .status-replied {
+  color: #c084fc;
+  background: color-mix(in srgb, #a855f7 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #a855f7 24%, transparent);
 }
 .status-queued {
   color: var(--status-warning-text);
@@ -527,10 +550,37 @@ main section {
 .progress-ring circle {
   transition:
     stroke-dasharray 600ms ease,
-    stroke-dashoffset 600ms ease;
+    stroke-dashoffset 600ms ease,
+    opacity 300ms ease;
 }
 .progress-ring .countdown-arc {
-  transition: stroke-dashoffset 1s linear;
+  transition: none;
+}
+.completion-check {
+  animation: completion-check-enter 450ms ease-out both;
+}
+.completion-check-path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  animation: completion-check-draw 450ms ease-out both;
+}
+@keyframes completion-check-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes completion-check-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
 }
 .queue-meter {
   background: var(--accent-gradient);

@@ -17,6 +17,9 @@ export type CampaignProgressData = {
   nextSendAt: string | null;
 };
 export function CampaignProgress({ data }: { data: CampaignProgressData }) {
+  return <BatchProgress key={data.id} data={data} />;
+}
+function BatchProgress({ data }: { data: CampaignProgressData }) {
   const [now, setNow] = useState(Date.parse(data.observedAt));
   const estimateKey = `${data.id}:${data.outstanding}:${data.nextSendAt}`;
   const makeEstimate = () => {
@@ -26,27 +29,35 @@ export function CampaignProgress({ data }: { data: CampaignProgressData }) {
       data.nextSendAt,
       observed,
     );
-    return { key: estimateKey, endAt: observed + duration * 1000, duration };
+    return { key: estimateKey, endAt: observed + duration * 1000 };
   };
   const [estimate, setEstimate] = useState(makeEstimate);
-  // A poll with an unchanged queue must not restart the countdown.
-  if (estimate.key !== estimateKey) setEstimate(makeEstimate());
+  // Scheduling changes may shorten the countdown, but never replenish it.
+  // Once expired, it stays in progress until delivery confirms the outcome.
+  if (estimate.key !== estimateKey) {
+    const updated = makeEstimate();
+    setEstimate({ ...updated, endAt: Math.min(estimate.endAt, updated.endAt) });
+  }
   const router = useRouter();
   const active = data.queued > 0 || data.review > 0;
   useEffect(() => {
+    if (!active) return;
     const tick = () => {
       if (document.visibilityState === "visible") {
-        setNow(Date.now());
+        setNow((previous) =>
+          Math.max(previous, Math.floor(Date.now() / 1000) * 1000),
+        );
       }
     };
     tick();
-    const interval = setInterval(tick, 1000);
+    // Sample the wall clock frequently, but render only when the second changes.
+    const interval = setInterval(tick, 100);
     document.addEventListener("visibilitychange", tick);
     return () => {
       clearInterval(interval);
       document.removeEventListener("visibilitychange", tick);
     };
-  }, []);
+  }, [active]);
   useEffect(() => {
     if (!active) return;
     const refresh = () => {
@@ -86,9 +97,11 @@ export function CampaignProgress({ data }: { data: CampaignProgressData }) {
         failed={data.failed}
         review={data.review}
         seconds={seconds}
-        countdownProgress={
-          estimate.duration ? Math.min(1, seconds / estimate.duration) : 0
-        }
+        countdown={{
+          startAt: Date.parse(data.createdAt),
+          endAt: estimate.endAt,
+          observedAt: Date.parse(data.observedAt),
+        }}
       />
       {(data.review > 0 || data.pendingDispatch) && (
         <p className="text-sm text-warning">

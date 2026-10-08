@@ -364,6 +364,9 @@ test("default queue ring is purple and selected recipients retain yellow in both
   );
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/compose");
+  await expect(
+    page.getByLabel("Choose a template", { exact: true }),
+  ).toHaveValue("");
   const ring = page.locator(".progress-ring");
   const recipient = page.getByRole("checkbox", { name: /UI Recipient/ });
   for (const [theme, yellow] of [
@@ -384,6 +387,9 @@ test("default queue ring is purple and selected recipients retain yellow in both
         .evaluate((element) => getComputedStyle(element).filter),
     ).not.toBe("none");
     await recipient.check();
+    await expect(
+      page.getByLabel("Choose a template", { exact: true }),
+    ).toHaveValue("");
     await expect(ring).toContainText("0:40");
     await expect(ring.locator(".progress-arc")).toHaveCount(0);
     const selectedArc = ring.locator('circle[stroke="var(--queued)"]');
@@ -440,6 +446,20 @@ test("template, contact import, preview, and individual campaign queue", async (
   await page.goto("/compose");
   await page.getByLabel("Role to Apply to Selected").fill("Engineer");
   await page.getByRole("checkbox", { name: /Alex/ }).check();
+  await expect(
+    page.getByLabel("Choose a template", { exact: true }),
+  ).toHaveValue("");
+  await page
+    .getByRole("button", { name: "Send to 1 recipient", exact: true })
+    .click();
+  await expect(
+    page.getByText("Choose a template and at least one eligible recipient.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page
+    .getByLabel("Choose a template", { exact: true })
+    .selectOption({ label: "Introduction" });
   await expect(
     page.getByRole("heading", { name: "Engineer at Acme", exact: true }),
   ).toBeVisible();
@@ -660,7 +680,7 @@ test("setup, name suggestion manual override, account menu, and theme persistenc
 test("example template, focused placeholder insertion, pasted lists and mixed roles with links", async ({
   page,
   userId,
-}) => {
+}, testInfo) => {
   await pool.query(
     'UPDATE "User" SET "preferredRoles"=$2,"linkUrl"=$3 WHERE id=$1',
     [
@@ -713,6 +733,9 @@ test("example template, focused placeholder insertion, pasted lists and mixed ro
   await page.goto("/compose");
   for (const name of ["Alex", "Sam", "Taylor"])
     await page.getByRole("checkbox", { name: new RegExp(name) }).check();
+  await page
+    .getByLabel("Choose a template", { exact: true })
+    .selectOption({ label: "Mixed Roles" });
   await expect(
     page.getByLabel("Attach Resume", { exact: false }),
   ).toBeDisabled();
@@ -760,7 +783,42 @@ test("example template, focused placeholder insertion, pasted lists and mixed ro
   );
   await expect(
     page.getByRole("region", { name: "Campaign delivery progress" }),
-  ).toContainText("all sent", { timeout: 15000 });
+  ).toContainText("Batch complete. All emails sent.", { timeout: 15000 });
+  const check = page.locator(".completion-check");
+  await expect(check).toBeVisible();
+  await expect(check).toHaveCSS("width", "80px");
+  await expect(page.locator(".progress-ring .timer-value")).toHaveCount(0);
+  await expect(check.locator("path")).toHaveCSS("animation-duration", "0.45s");
+  await check.locator("path").evaluate(async (e) => {
+    await Promise.all(e.getAnimations().map((animation) => animation.finished));
+  });
+  const animationStart = await check
+    .locator("path")
+    .evaluate((e) => e.getAnimations()[0].startTime);
+  await page.getByRole("button", { name: "Dark theme", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  // Finish the theme's root overlay before capturing this individual panel.
+  await page.evaluate(async () => {
+    await Promise.all(
+      document
+        .getAnimations()
+        .filter((animation) =>
+          (
+            animation.effect as KeyframeEffect | null
+          )?.pseudoElement?.startsWith("::view-transition"),
+        )
+        .map((animation) => animation.finished.catch(() => {})),
+    );
+  });
+  expect(
+    await check.locator("path").evaluate((e) => e.getAnimations()[0].startTime),
+  ).toBe(animationStart);
+  await page
+    .getByRole("region", { name: "Campaign delivery progress" })
+    .screenshot({ path: testInfo.outputPath("batch-complete.png") });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(check.locator("path")).toHaveCSS("animation-name", "none");
+  await expect(check.locator("path")).toHaveCSS("stroke-dashoffset", "0px");
   await page.goto("/compose");
   await expect(page.getByText(/Last Sent:/).first()).toBeVisible();
 });
@@ -798,7 +856,7 @@ test("progress distinguishes uncertain outcomes and includes the user queue in e
     [otherCampaign, "QUEUED", "READY"],
   ])
     await pool.query(
-      'INSERT INTO "Send" (id,"campaignId","contactId",status,"deliveryState") VALUES ($1,$2,$3,$4::"SendStatus",$5::"DeliveryState")',
+      'INSERT INTO "Send" (id,"campaignId","contactId",status,"deliveryState","dispatchedAt") VALUES ($1,$2,$3,$4::"SendStatus",$5::"DeliveryState",now())',
       [randomUUID(), id, contact, status, state],
     );
   await page.clock.install({ time: new Date() });
@@ -812,20 +870,55 @@ test("progress distinguishes uncertain outcomes and includes the user queue in e
   await page.clock.pauseAt(
     new Date((await page.evaluate(() => Date.now())) + 1000),
   );
+  // Let the sampled clock settle after pauseAt skips to the new timestamp.
+  await page.clock.runFor(100);
   const timer = card.locator(".progress-ring b");
   const readSeconds = async () => {
     const [minutes, seconds] = (await timer.innerText()).split(":").map(Number);
     return minutes * 60 + seconds;
   };
   const before = await readSeconds();
-  await page.clock.runFor(1000);
+  await expect(timer).toHaveCSS("animation-name", "none");
+  await expect(timer).toHaveCSS("opacity", "1");
+  await timer.evaluate((element) => {
+    element.setAttribute("data-timer-original", "true");
+  });
+  const arc = card.locator(".countdown-arc");
+  const offset = () =>
+    arc.evaluate((e) => Number(e.getAttribute("stroke-dashoffset")));
+  // The ring moves between digit changes, rather than stepping once a second.
+  const firstOffset = await offset();
+  await page.clock.runFor(250);
+  expect(await offset()).toBeGreaterThan(firstOffset);
+  await page.clock.runFor(750);
   expect(await readSeconds()).toBe(before - 1);
   await page.clock.runFor(1000);
   expect(await readSeconds()).toBe(before - 2);
+  await expect(timer).toHaveAttribute("data-timer-original", "true");
   await expect(card.locator(".countdown-arc")).toHaveCSS(
     "transition-duration",
-    "1s",
+    "0s",
   );
+  await expect(card.locator(".completion-check")).toHaveCount(0);
+  const beforeHidden = await offset();
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "hidden",
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await page.clock.runFor(2000);
+  expect(await offset()).toBe(beforeHidden);
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "visible",
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await expect.poll(offset).toBeGreaterThan(beforeHidden);
+  expect(await readSeconds()).toBe(before - 4);
   await page.clock.resume();
   await page.getByRole("button", { name: "Dark theme", exact: true }).click();
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
@@ -840,6 +933,112 @@ test("progress distinguishes uncertain outcomes and includes the user queue in e
   await expect(
     page.getByRole("region", { name: "Campaign delivery progress" }),
   ).toHaveCount(0);
+});
+
+test("batch countdown survives polls, individual sends and an expired estimate", async ({
+  page,
+  userId,
+}, testInfo) => {
+  const template = randomUUID(),
+    contact = randomUUID(),
+    campaign = randomUUID();
+  await pool.query(
+    "INSERT INTO \"Template\" (id,\"userId\",name,subject,body) VALUES ($1,$2,'Timer','Hi','Hello')",
+    [template, userId],
+  );
+  await pool.query(
+    "INSERT INTO \"Contact\" (id,\"userId\",name,email) VALUES ($1,$2,'Alex','timer@example.test')",
+    [contact, userId],
+  );
+  await pool.query(
+    'INSERT INTO "Campaign" (id,"userId","templateId",status,"createdAt") VALUES ($1,$2,$3,\'QUEUED\',now() - interval \'60 seconds\')',
+    [campaign, userId, template],
+  );
+  const sendIds = [randomUUID(), randomUUID()];
+  for (const id of sendIds)
+    await pool.query(
+      'INSERT INTO "Send" (id,"campaignId","contactId",status,"deliveryState","dispatchedAt") VALUES ($1,$2,$3,\'QUEUED\',\'READY\',now())',
+      [id, campaign, contact],
+    );
+  await page.goto(`/history?campaign=${campaign}`);
+  const card = page.getByRole("region", { name: "Campaign delivery progress" });
+  const arc = card.locator(".countdown-arc");
+  const offset = () =>
+    arc.evaluate((e) => Number(e.getAttribute("stroke-dashoffset")));
+  await expect.poll(offset).toBeGreaterThan(100);
+  await card.screenshot({ path: testInfo.outputPath("batch-active.png") });
+  const initial = await offset();
+  // An unchanged server poll must not replenish the countdown.
+  await page.waitForTimeout(5500);
+  expect(await offset()).toBeGreaterThan(initial);
+  await pool.query(
+    'UPDATE "Send" SET status=\'SENT\',"deliveryState"=\'DONE\',"sentAt"=now() WHERE id=$1',
+    [sendIds[0]],
+  );
+  await expect(card).toContainText("Queued · 1", { timeout: 15000 });
+  // Updating the queue must retain elapsed batch time in the arc denominator.
+  await expect.poll(offset).toBeGreaterThan(150);
+  await expect(card.locator(".completion-check")).toHaveCount(0);
+  const timerSeconds = () =>
+    card.locator(".timer-value").evaluate((element) => {
+      const [minutes, seconds] = element.textContent!.split(":").map(Number);
+      return minutes * 60 + seconds;
+    });
+  const beforeDelay = await timerSeconds();
+  await pool.query('UPDATE "User" SET "nextSendAt"=$2::timestamp WHERE id=$1', [
+    userId,
+    new Date((await page.evaluate(() => Date.now())) + 120000).toISOString(),
+  ]);
+  // The explanatory range may change, but the running timer must not increase.
+  await expect(card).toContainText("Approximate remaining: 2–3 minutes", {
+    timeout: 15000,
+  });
+  expect(await timerSeconds()).toBeLessThanOrEqual(beforeDelay);
+  expect(await offset()).toBeGreaterThan(initial);
+  await pool.query('UPDATE "User" SET "nextSendAt"=$2::timestamp WHERE id=$1', [
+    userId,
+    new Date((await page.evaluate(() => Date.now())) - 1000).toISOString(),
+  ]);
+  await expect(card.locator(".timer-value")).toHaveText("Sending", {
+    timeout: 15000,
+  });
+  await expect(card).toContainText("Please be patient");
+  await expect(card.locator(".completion-check")).toHaveCount(0);
+  await pool.query('UPDATE "User" SET "nextSendAt"=$2::timestamp WHERE id=$1', [
+    userId,
+    new Date((await page.evaluate(() => Date.now())) + 120000).toISOString(),
+  ]);
+  await expect(card).toContainText("Approximate remaining: 2–3 minutes", {
+    timeout: 15000,
+  });
+  await expect(card.locator(".timer-value")).toHaveText("Sending");
+  expect(await offset()).toBeCloseTo(2 * Math.PI * 59);
+  await pool.query(
+    'UPDATE "Send" SET status=\'FAILED\',"deliveryState"=\'DONE\',"attemptedAt"=now() WHERE id=$1',
+    [sendIds[1]],
+  );
+  await expect(card).toContainText("with failures", { timeout: 15000 });
+  await expect(card.locator(".completion-check")).toHaveCount(0);
+  await expect(arc).toHaveCount(0);
+  // Confirm successful completion without relying on a live sending service.
+  await pool.query(
+    'UPDATE "Send" SET status=\'SENT\',"deliveryState"=\'DONE\',"sentAt"=now() WHERE id=$1',
+    [sendIds[1]],
+  );
+  await page.reload();
+  const check = card.locator(".completion-check");
+  await expect(check).toBeVisible();
+  await expect(check).toHaveCSS("width", "80px");
+  await expect(card.locator(".timer-value")).toHaveCount(0);
+  await expect(
+    card.locator(".progress-ring span").filter({ hasText: /^Done$/ }),
+  ).toHaveCSS("font-size", "12px");
+  await check.locator("path").evaluate(async (element) => {
+    await Promise.all(
+      element.getAnimations().map((animation) => animation.finished),
+    );
+  });
+  await card.screenshot({ path: testInfo.outputPath("batch-complete.png") });
 });
 
 test("compose bulk selection respects role filters, prior sends and the batch cap", async ({

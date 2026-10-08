@@ -73,7 +73,7 @@ export function Status({ status }: { status: string }) {
     QUEUED: "status-queued",
     SENT: "status-sent",
     FAILED: "status-failed",
-    REPLIED: "status-sent",
+    REPLIED: "status-replied",
   };
   return (
     <span className={`status-pill ${styles[status] ?? styles.QUEUED}`}>

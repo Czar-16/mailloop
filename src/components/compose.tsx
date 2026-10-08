@@ -39,7 +39,7 @@ export function Compose({
   roles: string[];
   linkUrl: string | null;
 }) {
-  const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
+  const [templateId, setTemplateId] = useState("");
   const [selected, setSelected] = useState<ComposeContact[]>([]);
   const [role, setRole] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
@@ -457,35 +457,7 @@ export function Compose({
               email.
             </p>
           )}
-          <div className="pt-3">
-            <p className="flex items-center gap-2 break-all text-xs text-body">
-              <Paperclip className="size-4 shrink-0" aria-hidden="true" />
-              <span
-                className="min-w-0 truncate"
-                title={attachResume ? (resume ?? undefined) : undefined}
-              >
-                {attachResume ? resume : "No PDF attachment"}
-              </span>
-              <Link href="/settings" className="ml-auto text-link">
-                Settings
-              </Link>
-            </p>
-          </div>
-        </section>
-        <section className="panel space-y-4 p-5">
-          <h2 className="section-label">Send queue</h2>
-          <ProgressRing
-            sent={0}
-            queued={included.length}
-            failed={0}
-            seconds={estimateSeconds(included.length)}
-            draft
-          />
-          <p className="text-xs text-body">
-            Estimate for selected recipients at 20–60 seconds between sends.
-            This is not a delivery confirmation.
-          </p>
-          <div className="space-y-3">
+          <div className="mt-4 space-y-3 border-t border-border pt-3">
             <label className="flex min-h-11 items-center gap-3 text-sm">
               <input
                 type="checkbox"
@@ -514,6 +486,34 @@ export function Compose({
                 : "not in this template"}
             </span>
           </div>
+          <div className="pt-3">
+            <p className="flex items-center gap-2 break-all text-xs text-body">
+              <Paperclip className="size-4 shrink-0" aria-hidden="true" />
+              <span
+                className="min-w-0 truncate"
+                title={attachResume ? (resume ?? undefined) : undefined}
+              >
+                {attachResume ? resume : "No PDF attachment"}
+              </span>
+              <Link href="/settings" className="ml-auto text-link">
+                Settings
+              </Link>
+            </p>
+          </div>
+        </section>
+        <section className="panel space-y-4 p-5">
+          <h2 className="section-label">Send queue</h2>
+          <ProgressRing
+            sent={0}
+            queued={included.length}
+            failed={0}
+            seconds={estimateSeconds(included.length)}
+            draft
+          />
+          <p className="text-xs text-body">
+            Estimate for selected recipients at 20–60 seconds between sends.
+            This is not a delivery confirmation.
+          </p>
           {[
             { label: "Selected recipients", value: included.length, max: 15 },
             { label: "Last 24 hours + queued", value: used, max: 500 },
