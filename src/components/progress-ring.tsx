@@ -16,6 +16,7 @@ export function ProgressRing({
   review = 0,
   seconds,
   draft = false,
+  countdownProgress,
 }: {
   sent: number;
   queued: number;
@@ -23,6 +24,7 @@ export function ProgressRing({
   review?: number;
   seconds: number;
   draft?: boolean;
+  countdownProgress?: number;
 }) {
   const gradientId = useId();
   const segments = [
@@ -96,10 +98,26 @@ export function ProgressRing({
               />
             );
           })}
+          {queued > 0 && countdownProgress !== undefined && (
+            <circle
+              className="countdown-arc"
+              cx="85"
+              cy="85"
+              r="59"
+              fill="none"
+              stroke="var(--queued)"
+              strokeWidth="3"
+              strokeLinecap="round"
+              strokeDasharray={2 * Math.PI * 59}
+              strokeDashoffset={2 * Math.PI * 59 * (1 - countdownProgress)}
+            />
+          )}
         </svg>
-        <div className="absolute inset-0 grid content-center text-center">
-          <b className="font-mono text-[30px] tracking-[-.04em]">{center}</b>
-          <span className="text-[11px] uppercase tracking-widest text-body">
+        <div className="absolute inset-0 mx-auto grid w-[110px] content-center text-center">
+          <b className="font-mono text-[30px] tracking-[-.04em] tabular-nums">
+            {center}
+          </b>
+          <span className="text-[10px] uppercase tracking-wide text-body">
             {queued
               ? "est. left"
               : review
@@ -108,7 +126,7 @@ export function ProgressRing({
                   ? "with failures"
                   : sent
                     ? "all sent"
-                    : "select recipients"}
+                    : "est. time left"}
           </span>
         </div>
       </div>

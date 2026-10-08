@@ -41,16 +41,16 @@ export function RoleChoices({
 }
 export function Preferences({
   roles,
-  resumeUrl,
+  linkUrl,
   setup = false,
 }: {
   roles: string[];
-  resumeUrl: string | null;
+  linkUrl: string | null;
   setup?: boolean;
 }) {
   const [values, setValues] = useState(roles);
   const [custom, setCustom] = useState("");
-  const [url, setUrl] = useState(resumeUrl ?? "");
+  const [url, setUrl] = useState(linkUrl ?? "");
   const [result, setResult] = useState<ActionResult>();
   const [dirty, setDirty] = useState(false);
   const [pending, start] = useTransition();
@@ -62,7 +62,7 @@ export function Preferences({
   )?.[1];
   useEffect(() => {
     if (!pending && result?.ok === false) {
-      if (result.fieldErrors?.resumeUrl) urlInput.current?.focus();
+      if (result.fieldErrors?.linkUrl) urlInput.current?.focus();
       else if (roleError) customInput.current?.focus();
     }
   }, [result, pending, roleError]);
@@ -115,7 +115,7 @@ export function Preferences({
           start(async () => {
             const r = await savePreferences({
               preferredRoles: values,
-              resumeUrl: url,
+              linkUrl: url,
             });
             setResult(r);
             if (r.ok) {
@@ -154,17 +154,17 @@ export function Preferences({
         </Button>
         {!setup && (
           <label className="block border-t border-border pt-4 text-sm">
-            <span className="section-label mb-2 block">Resume link</span>
-            Resume URL (optional HTTPS link)
+            <span className="section-label mb-2 block">Link</span>
+            URL (optional HTTPS link)
             <Input
               ref={urlInput}
-              aria-invalid={!!result?.fieldErrors?.resumeUrl}
+              aria-invalid={!!result?.fieldErrors?.linkUrl}
               aria-describedby={
-                result?.fieldErrors?.resumeUrl
+                result?.fieldErrors?.linkUrl
                   ? "preference-url-error"
                   : undefined
               }
-              name="resumeUrl"
+              name="linkUrl"
               type="url"
               value={url}
               maxLength={2048}
@@ -174,13 +174,13 @@ export function Preferences({
                 setUrl(e.target.value);
                 setDirty(true);
               }}
-              placeholder="https://example.com/resume…"
+              placeholder="https://example.com/…"
             />
           </label>
         )}
-        {result?.fieldErrors?.resumeUrl && (
+        {result?.fieldErrors?.linkUrl && (
           <p id="preference-url-error" className="text-xs text-error-deep">
-            {result.fieldErrors.resumeUrl}
+            {result.fieldErrors.linkUrl}
           </p>
         )}
         <Feedback result={result} />
@@ -192,9 +192,9 @@ export function Preferences({
   );
 }
 
-export function RoleSetup({ resumeUrl }: { resumeUrl: string | null }) {
+export function RoleSetup({ linkUrl }: { linkUrl: string | null }) {
   const pathname = usePathname();
   return pathname === "/settings" ? null : (
-    <Preferences roles={[]} resumeUrl={resumeUrl} setup />
+    <Preferences roles={[]} linkUrl={linkUrl} setup />
   );
 }

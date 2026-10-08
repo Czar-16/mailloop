@@ -19,7 +19,7 @@ async function SettingsContent() {
   const connected = user.gmailAuthorized && !!user.encryptedRefreshToken;
   return (
     <>
-      <Preferences roles={user.preferredRoles} resumeUrl={user.resumeUrl} />
+      <Preferences roles={user.preferredRoles} linkUrl={user.linkUrl} />
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
         <section className="panel space-y-5 p-6">
           <h2 className="section-label">Account · Gmail connection</h2>
@@ -65,7 +65,7 @@ async function SettingsContent() {
       <section className="panel mt-6 space-y-3 p-6">
         <h2 className="section-label">Sending</h2>
         <p className="text-sm text-body">
-          Your limit is 500 individual emails in a rolling 24 hours, including
+          Your limit is 500 emails in a rolling 24 hours, including
           reserved queue capacity. Select up to 15 recipients per batch. Sends
           are spaced 20–60 seconds apart.
         </p>

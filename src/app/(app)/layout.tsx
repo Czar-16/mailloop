@@ -40,7 +40,7 @@ async function AuthenticatedLayout({
       </header>
       <main id="main-content" className="page-container pt-[26px] pb-[60px]">
         {!user.preferredRoles.length && (
-          <RoleSetup resumeUrl={user.resumeUrl} />
+          <RoleSetup linkUrl={user.linkUrl} />
         )}
         <PageTransition>{children}</PageTransition>
       </main>

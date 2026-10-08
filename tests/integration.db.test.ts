@@ -141,11 +141,11 @@ describe.runIf(enabled)(
       });
       await db.user.update({
         where: { id: userId },
-        data: { resumeUrl: "https://example.com/first" },
+        data: { linkUrl: "https://example.com/first" },
       });
       await db.template.updateMany({
         where: { id: templateId, userId },
-        data: { body: "Hi {{name}}: {{role}}. {{resume_link}}" },
+        data: { body: "Hi {{name}}: {{role}}. {{link}}" },
       });
       const pdf = Buffer.from("%PDF-1.4\n%%EOF");
       await storeLocalResume(
@@ -173,7 +173,7 @@ describe.runIf(enabled)(
       ).toBe(true);
       await db.user.update({
         where: { id: userId },
-        data: { resumeUrl: "https://example.com/second" },
+        data: { linkUrl: "https://example.com/second" },
       });
       await db.contact.updateMany({
         where: { id: second.id, userId },
@@ -202,14 +202,14 @@ describe.runIf(enabled)(
       ).rejects.toThrow("PDF");
       await db.template.updateMany({
         where: { id: templateId, userId },
-        data: { body: "{{resume_link}}" },
+        data: { body: "{{link}}" },
       });
       await expect(createCampaign(userId, request())).rejects.toThrow(
-        "resume URL",
+        "URL",
       );
       await db.user.update({
         where: { id: userId },
-        data: { resumeUrl: "https://example.com/resume" },
+        data: { linkUrl: "https://example.com/resume" },
       });
       await expect(
         createCampaign(

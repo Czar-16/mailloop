@@ -7,7 +7,7 @@ import {
   contactSchema,
   templateSchema,
   preferredRolesSchema,
-  resumeUrlSchema,
+  linkUrlSchema,
 } from "@/lib/validation";
 import { parseContacts, validateImportRows } from "@/lib/imports";
 import { AppError, type ActionResult } from "@/lib/errors";
@@ -177,7 +177,7 @@ export async function submitCampaign(input: unknown) {
     return {
       ok: true,
       id: campaign.id,
-      message: `${campaign.count} individual emails queued. ${campaign.skipped} recipients skipped.`,
+      message: `Emails queued for ${campaign.count} recipient${campaign.count === 1 ? "" : "s"}. ${campaign.skipped} recipients skipped.`,
     };
   });
 }
@@ -201,12 +201,12 @@ export async function savePreferences(input: unknown) {
     const data = z
       .object({
         preferredRoles: preferredRolesSchema,
-        resumeUrl: resumeUrlSchema,
+        linkUrl: linkUrlSchema,
       })
       .parse(input);
     await db.user.update({
       where: { id: user.id },
-      data: { ...data, resumeUrl: data.resumeUrl || null },
+      data: { ...data, linkUrl: data.linkUrl || null },
     });
     revalidatePath("/", "layout");
     return { ok: true, message: "Preferences saved." };

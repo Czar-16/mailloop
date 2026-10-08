@@ -46,7 +46,7 @@ async function TemplatesContent({
         key={editing?.id ?? "new"}
         template={editing ?? undefined}
         contacts={contacts}
-        resumeUrl={user.resumeUrl}
+        linkUrl={user.linkUrl}
       />
       <div className="mt-8">
         <h2 className="section-label mb-4">Saved templates</h2>

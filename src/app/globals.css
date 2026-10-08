@@ -44,6 +44,8 @@
   --button-glow: 16%;
   --button-glow-hover: 23%;
   --ring-track: #9c83d3;
+  --placeholder-background: #a5f3fc;
+  --placeholder-foreground: #164e63;
   --skeleton-base: color-mix(in srgb, var(--accent) 9%, var(--surface));
   --skeleton-highlight: color-mix(in srgb, var(--card) 65%, transparent);
   --accent-gradient: linear-gradient(135deg, var(--accent), var(--accent2));
@@ -74,6 +76,8 @@
   --button-glow: 24%;
   --button-glow-hover: 32%;
   --ring-track: #725cab;
+  --placeholder-background: #155e75;
+  --placeholder-foreground: #cffafe;
   --skeleton-highlight: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 @theme inline {
@@ -480,8 +484,8 @@ main section {
   overflow-wrap: anywhere;
 }
 .mail-preview mark {
-  background: color-mix(in srgb, var(--accent) 20%, transparent);
-  color: var(--foreground);
+  background: var(--placeholder-background);
+  color: var(--placeholder-foreground);
   padding: 0 4px;
   border-radius: 5px;
 }
@@ -524,6 +528,13 @@ main section {
   transition:
     stroke-dasharray 600ms ease,
     stroke-dashoffset 600ms ease;
+}
+.progress-ring .countdown-arc {
+  transition: stroke-dashoffset 1s linear;
+}
+.queue-meter {
+  background: var(--accent-gradient);
+  transition: width 600ms ease;
 }
 .progress-ring {
   flex-shrink: 0;

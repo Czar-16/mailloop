@@ -104,21 +104,21 @@ describe.runIf(enabled)("authenticated database-backed actions", () => {
     expect(
       await savePreferences({
         preferredRoles: ["SDE Intern", "Frontend Developer"],
-        resumeUrl: "https://example.com/resume",
+        linkUrl: "https://example.com/resume",
       }),
     ).toMatchObject({ ok: true });
     expect(await db.user.findUnique({ where: { id: userId } })).toMatchObject({
       preferredRoles: ["SDE Intern", "Frontend Developer"],
-      resumeUrl: "https://example.com/resume",
+      linkUrl: "https://example.com/resume",
     });
     expect(await db.user.findUnique({ where: { id: otherId } })).toMatchObject({
       preferredRoles: [],
-      resumeUrl: null,
+      linkUrl: null,
     });
     for (const input of [
-      { preferredRoles: [], resumeUrl: "" },
-      { preferredRoles: ["Engineer", "engineer"], resumeUrl: "" },
-      { preferredRoles: ["Engineer"], resumeUrl: "http://example.com" },
+      { preferredRoles: [], linkUrl: "" },
+      { preferredRoles: ["Engineer", "engineer"], linkUrl: "" },
+      { preferredRoles: ["Engineer"], linkUrl: "http://example.com" },
     ])
       expect(await savePreferences(input)).toMatchObject({ ok: false });
   });
@@ -140,7 +140,7 @@ describe.runIf(enabled)("authenticated database-backed actions", () => {
       () => importContacts("name,email,company\nNew,new@example.test,Acme"),
       () => submitCampaign({}),
       () => refreshReplies(),
-      () => savePreferences({ preferredRoles: ["Engineer"], resumeUrl: "" }),
+      () => savePreferences({ preferredRoles: ["Engineer"], linkUrl: "" }),
     ];
     for (const call of calls) {
       await expect(call()).rejects.toThrow("Authentication required");

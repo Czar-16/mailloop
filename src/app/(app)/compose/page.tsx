@@ -125,7 +125,7 @@ async function ComposePageContent({
         contacts={recipients}
         used={used}
         roles={user.preferredRoles}
-        resumeUrl={user.resumeUrl}
+        linkUrl={user.linkUrl}
         resume={attachment?.fileName ?? null}
         connected={user.gmailAuthorized && !!user.encryptedRefreshToken}
       />

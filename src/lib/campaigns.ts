@@ -44,9 +44,9 @@ export async function createCampaign(userId: string, input: unknown) {
         where: { id: data.templateId, userId, archivedAt: null },
       });
       if (!template) throw new AppError("Choose an available template.");
-      if (/{{\s*resume_link\s*}}/.test(template.body) && !user.resumeUrl)
+      if (/{{\s*link\s*}}/.test(template.body) && !user.linkUrl)
         throw new AppError(
-          "Save an HTTPS resume URL in Settings for this template.",
+          "Save an HTTPS URL in Settings for this template.",
         );
       const contacts = await tx.contact.findMany({
         where: { id: { in: data.recipientIds }, userId, archivedAt: null },
@@ -127,7 +127,7 @@ export async function createCampaign(userId: string, input: unknown) {
           name: c.name,
           company: c.company,
           role,
-          resume_link: user.resumeUrl,
+          link: user.linkUrl,
         };
 
         const subject = renderTemplate(template.subject, values);

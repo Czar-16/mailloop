@@ -12,7 +12,7 @@ export async function requireUser() {
       email: true,
       name: true,
       preferredRoles: true,
-      resumeUrl: true,
+      linkUrl: true,
       nextSendAt: true,
       gmailAuthorized: true,
       currentAttachmentId: true,

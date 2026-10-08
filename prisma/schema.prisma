@@ -20,7 +20,7 @@ model User {
   googleId              String?      @unique
   gmailAuthorized       Boolean      @default(false)
   preferredRoles        String[]     @default([])
-  resumeUrl             String?
+  linkUrl               String?
   nextSendAt            DateTime?
   currentAttachmentId   String?
   createdAt             DateTime     @default(now())

@@ -26,7 +26,7 @@ export function previewParts(
     const valid =
       token !== undefined &&
       Object.hasOwn(values, token) &&
-      (body || token !== "resume_link");
+      (body || token !== "link");
     parts.push({
       text: valid ? (values[token!] ?? "") : match[0],
       kind: valid ? "filled" : "invalid",
@@ -35,8 +35,8 @@ export function previewParts(
       errors.push(
         token === undefined || token.includes("{{")
           ? "A {{ }} bracket is not closed."
-          : token === "resume_link" && !body
-            ? "{{resume_link}} is allowed in the message body only."
+          : token === "link" && !body
+            ? "{{link}} is allowed in the message body only."
             : `Unknown placeholder: ${match[0]}.`,
       );
     cursor = match.index + match[0].length;
@@ -58,12 +58,12 @@ function Highlighted({ parts }: { parts: PreviewPart[] }) {
 }
 export function TemplatePreview({
   contacts,
-  resumeUrl,
+  linkUrl,
   subject,
   body,
 }: {
   contacts: PreviewContact[];
-  resumeUrl: string | null;
+  linkUrl: string | null;
   subject: string;
   body: string;
 }) {
@@ -75,13 +75,13 @@ export function TemplatePreview({
         name: recipient.name,
         company: recipient.company,
         role: recipient.jobRole,
-        resume_link: resumeUrl,
+        link: linkUrl,
       }
     : {
         name: "Recipient name",
         company: "Company",
         role: "Job role",
-        resume_link: resumeUrl,
+        link: linkUrl,
       };
   const renderedSubject = previewParts(subject, values, false);
   const renderedBody = previewParts(body, values, true);
@@ -92,7 +92,7 @@ export function TemplatePreview({
     ...new Set(
       [
         ...subject.matchAll(/{{\s*(name|company|role)\s*}}/g),
-        ...body.matchAll(/{{\s*(name|company|role|resume_link)\s*}}/g),
+        ...body.matchAll(/{{\s*(name|company|role|link)\s*}}/g),
       ]
         .filter((match) => !values[match[1] as keyof typeof values])
         .map((match) => match[1]),

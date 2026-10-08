@@ -450,7 +450,7 @@ test("template, contact import, preview, and individual campaign queue", async (
     fullPage: true,
   });
   await page
-    .getByRole("button", { name: "Send 1 Individual Email", exact: true })
+    .getByRole("button", { name: "Send to 1 recipient", exact: true })
     .click();
   await expect(page).toHaveURL(/\/history\?campaign=/);
   await expect(
@@ -662,11 +662,11 @@ test("example template, focused placeholder insertion, pasted lists and mixed ro
   userId,
 }) => {
   await pool.query(
-    'UPDATE "User" SET "preferredRoles"=$2,"resumeUrl"=$3 WHERE id=$1',
+    'UPDATE "User" SET "preferredRoles"=$2,"linkUrl"=$3 WHERE id=$1',
     [
       userId,
       ["SDE Intern", "Frontend Developer"],
-      "https://example.com/resume",
+      "https://example.com/portfolio",
     ],
   );
   await page.goto("/templates");
@@ -685,10 +685,8 @@ test("example template, focused placeholder insertion, pasted lists and mixed ro
   );
   await page
     .getByLabel("Message", { exact: true })
-    .fill("Hi {{name}}, I’m applying for {{role}}. Resume: ");
-  await page
-    .getByRole("button", { name: "{{resume_link}}", exact: true })
-    .click();
+    .fill("Hi {{name}}, I’m applying for {{role}}. Link: ");
+  await page.getByRole("button", { name: "{{link}}", exact: true }).click();
   await page
     .getByRole("button", { name: "Save Template", exact: true })
     .click();
@@ -719,7 +717,10 @@ test("example template, focused placeholder insertion, pasted lists and mixed ro
     page.getByLabel("Attach Resume", { exact: false }),
   ).toBeDisabled();
   await expect(
-    page.getByRole("link", { name: "https://example.com/resume", exact: true }),
+    page.getByRole("link", {
+      name: "https://example.com/portfolio",
+      exact: true,
+    }),
   ).toBeVisible();
   await page
     .getByLabel("Preview recipient", { exact: true })
@@ -731,7 +732,7 @@ test("example template, focused placeholder insertion, pasted lists and mixed ro
     }),
   ).toBeVisible();
   await page
-    .getByRole("button", { name: "Send 3 Individual Emails", exact: true })
+    .getByRole("button", { name: "Send to 3 recipients", exact: true })
     .click();
   await expect(page).toHaveURL(/history\?campaign=/);
   await expect(
@@ -749,7 +750,7 @@ test("example template, focused placeholder insertion, pasted lists and mixed ro
   expect(
     sends.rows.every(
       (r) =>
-        r.body.includes("https://example.com/resume") &&
+        r.body.includes("https://example.com/portfolio") &&
         r.attachmentId === null,
     ),
   ).toBe(true);
@@ -800,6 +801,7 @@ test("progress distinguishes uncertain outcomes and includes the user queue in e
       'INSERT INTO "Send" (id,"campaignId","contactId",status,"deliveryState") VALUES ($1,$2,$3,$4::"SendStatus",$5::"DeliveryState")',
       [randomUUID(), id, contact, status, state],
     );
+  await page.clock.install({ time: new Date() });
   await page.goto(`/history?campaign=${campaign}`);
   const card = page.getByRole("region", { name: "Campaign delivery progress" });
   await expect(card).toContainText("Delivery needs review");
@@ -807,6 +809,24 @@ test("progress distinguishes uncertain outcomes and includes the user queue in e
     timeout: 15000,
   });
   await expect(card).toContainText("Retries and service delays");
+  await page.clock.pauseAt(
+    new Date((await page.evaluate(() => Date.now())) + 1000),
+  );
+  const timer = card.locator(".progress-ring b");
+  const readSeconds = async () => {
+    const [minutes, seconds] = (await timer.innerText()).split(":").map(Number);
+    return minutes * 60 + seconds;
+  };
+  const before = await readSeconds();
+  await page.clock.runFor(1000);
+  expect(await readSeconds()).toBe(before - 1);
+  await page.clock.runFor(1000);
+  expect(await readSeconds()).toBe(before - 2);
+  await expect(card.locator(".countdown-arc")).toHaveCSS(
+    "transition-duration",
+    "1s",
+  );
+  await page.clock.resume();
   await page.getByRole("button", { name: "Dark theme", exact: true }).click();
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -820,6 +840,96 @@ test("progress distinguishes uncertain outcomes and includes the user queue in e
   await expect(
     page.getByRole("region", { name: "Campaign delivery progress" }),
   ).toHaveCount(0);
+});
+
+test("compose bulk selection respects role filters, prior sends and the batch cap", async ({
+  page,
+  userId,
+}) => {
+  const templateId = randomUUID(),
+    campaignId = randomUUID();
+  await pool.query(
+    'INSERT INTO "Template" (id,"userId",name,subject,body) VALUES ($1,$2,$3,$4,$5)',
+    [templateId, userId, "Bulk selection", "Hi {{name}}", "Hello {{role}}"],
+  );
+  await pool.query(
+    'INSERT INTO "Campaign" (id,"userId","templateId",status) VALUES ($1,$2,$3,$4)',
+    [campaignId, userId, templateId, "QUEUED"],
+  );
+  for (let index = 0; index < 20; index++) {
+    const contactId = randomUUID();
+    await pool.query(
+      'INSERT INTO "Contact" (id,"userId",name,email,"jobRole") VALUES ($1,$2,$3,$4,$5)',
+      [
+        contactId,
+        userId,
+        `Person ${String(index).padStart(2, "0")}`,
+        `person${index}@example.test`,
+        index < 18 ? "Engineer" : "Designer",
+      ],
+    );
+    if (index < 2)
+      await pool.query(
+        'INSERT INTO "Send" (id,"campaignId","contactId",status,"deliveryState","sentAt") VALUES ($1,$2,$3,$4::"SendStatus",$5::"DeliveryState",$6)',
+        [
+          randomUUID(),
+          campaignId,
+          contactId,
+          index === 0 ? "SENT" : "QUEUED",
+          index === 0 ? "DONE" : "READY",
+          index === 0 ? new Date() : null,
+        ],
+      );
+  }
+  await page.goto("/compose");
+  await expect(page.locator(".progress-ring")).toContainText("est. time left");
+  const filter = page.getByLabel("Filter by Job Role", { exact: true });
+  await filter.selectOption("Engineer");
+  await page.getByRole("button", { name: "Select all", exact: true }).click();
+  await expect(
+    page.getByText("15 / 15 selected", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("checkbox", { name: /Person 00/ }),
+  ).not.toBeChecked();
+  await expect(
+    page.getByRole("checkbox", { name: /Person 01/ }),
+  ).not.toBeChecked();
+  const meter = page.getByRole("progressbar", {
+    name: "Selected recipients",
+    exact: true,
+  });
+  await expect(meter).toHaveAttribute("aria-valuenow", "15");
+  await expect(
+    page.getByRole("progressbar", {
+      name: "Last 24 hours + queued",
+      exact: true,
+    }),
+  ).toHaveAttribute("aria-valuenow", "2");
+  await page
+    .getByRole("button", { name: "Clear selection", exact: true })
+    .click();
+  await expect(meter).toHaveAttribute("aria-valuenow", "0");
+  await filter.selectOption("Designer");
+  await page.getByRole("button", { name: "Select all", exact: true }).click();
+  await expect(
+    page.getByText("2 / 15 selected", { exact: true }),
+  ).toBeVisible();
+  await filter.selectOption("Engineer");
+  await page.getByRole("button", { name: "Select all", exact: true }).click();
+  await expect(
+    page.getByText("15 / 15 selected", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Clear selection", exact: true })
+    .click();
+  await expect(
+    page.getByText("2 / 15 selected", { exact: true }),
+  ).toBeVisible();
+  await filter.selectOption("Designer");
+  await page
+    .getByRole("button", { name: "Clear selection", exact: true })
+    .click();
 });
 
 test("attachment defaults, example replacement warning, and batch role filters", async ({
@@ -843,11 +953,14 @@ test("attachment defaults, example replacement warning, and batch role filters",
   await page.goto("/compose");
   await expect(page.getByLabel("Attach Resume", { exact: true })).toBeChecked();
   await page.getByLabel("Attach Resume", { exact: true }).uncheck();
-  await expect(page.getByText("PDF: None.", { exact: false })).toBeVisible();
+  await expect(
+    page.getByText("No PDF attachment", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("resume.pdf", { exact: true })).toBeVisible();
   await page.goto("/settings");
   await page
-    .getByLabel("Resume URL (optional HTTPS link)")
-    .fill("https://example.com/resume");
+    .getByLabel("URL (optional HTTPS link)")
+    .fill("https://example.com/portfolio");
   await page
     .getByRole("button", { name: "Save Preferences", exact: true })
     .click();
@@ -860,7 +973,7 @@ test("attachment defaults, example replacement warning, and batch role filters",
   ).not.toBeChecked();
   await page.getByLabel("Attach Resume", { exact: true }).check();
   await expect(
-    page.getByText("PDF: resume.pdf.", { exact: false }),
+    page.getByText("resume.pdf", { exact: true }).last(),
   ).toBeVisible();
   await page.goto("/templates");
   await page.getByLabel("Subject", { exact: true }).fill("Keep this draft");
@@ -905,6 +1018,11 @@ test("attachment defaults, example replacement warning, and batch role filters",
   await page.getByRole("checkbox", { name: /Alex/ }).uncheck();
   await page.goto("/");
   await page.getByRole("button", { name: "Dark theme", exact: true }).click();
+  await page.evaluate(async () => {
+    await Promise.allSettled(
+      document.getAnimations().map((animation) => animation.finished),
+    );
+  });
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.evaluate(() => localStorage.removeItem("mailloop-theme"));
   await page.reload();
@@ -955,7 +1073,7 @@ test("redesign: populated pages in both themes, live recipient preview, cursor i
     contactId = randomUUID(),
     campaignId = randomUUID();
   await pool.query(
-    'UPDATE "User" SET "preferredRoles"=$2,"resumeUrl"=$3 WHERE id=$1',
+    'UPDATE "User" SET "preferredRoles"=$2,"linkUrl"=$3 WHERE id=$1',
     [
       userId,
       ["SDE Intern", "Backend Developer"],
@@ -969,7 +1087,7 @@ test("redesign: populated pages in both themes, live recipient preview, cursor i
       userId,
       "Backend template",
       "Exploring {{role}} opportunities at {{company}}",
-      "Hi {{name}},\n\nI’m interested in {{role}} opportunities at {{company}}.\n\nResume: {{resume_link}}\n\nThank you for your time.",
+      "Hi {{name}},\n\nI’m interested in {{role}} opportunities at {{company}}.\n\nLink: {{link}}\n\nThank you for your time.",
     ],
   );
   await pool.query(

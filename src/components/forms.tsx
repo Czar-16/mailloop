@@ -130,10 +130,10 @@ const example = {
 export function TemplateForm({
   template,
   contacts = [],
-  resumeUrl = null,
+  linkUrl = null,
 }: {
   contacts?: PreviewContact[];
-  resumeUrl?: string | null;
+  linkUrl?: string | null;
   template?: { id: string; name: string; subject: string; body: string };
 }) {
   const [result, setResult] = useState<ActionResult>();
@@ -192,11 +192,11 @@ export function TemplateForm({
         </h2>
         <p className="sr-only">
           Write placeholders in templates: {"{{name}}, {{company}}, {{role}}"}.
-          Enter actual values in Contacts and Compose. {"{{resume_link}}"} uses
-          your saved HTTPS URL in the message body.
+          Enter actual values in Contacts and Compose. {"{{link}}"} uses your
+          saved HTTPS URL in the message body.
         </p>
         <div className="flex flex-wrap gap-2">
-          {["name", "company", "role", "resume_link"].map((token) => (
+          {["name", "company", "role", "link"].map((token) => (
             <Button
               key={token}
               type="button"
@@ -354,7 +354,7 @@ export function TemplateForm({
       </form>
       <TemplatePreview
         contacts={contacts}
-        resumeUrl={resumeUrl}
+        linkUrl={linkUrl}
         subject={draft.subject}
         body={draft.body}
       />

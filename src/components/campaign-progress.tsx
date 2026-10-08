@@ -18,22 +18,48 @@ export type CampaignProgressData = {
 };
 export function CampaignProgress({ data }: { data: CampaignProgressData }) {
   const [now, setNow] = useState(Date.parse(data.observedAt));
+  const estimateKey = `${data.id}:${data.outstanding}:${data.nextSendAt}`;
+  const makeEstimate = () => {
+    const observed = Date.parse(data.observedAt);
+    const duration = estimateSeconds(
+      data.outstanding,
+      data.nextSendAt,
+      observed,
+    );
+    return { key: estimateKey, endAt: observed + duration * 1000, duration };
+  };
+  const [estimate, setEstimate] = useState(makeEstimate);
+  // A poll with an unchanged queue must not restart the countdown.
+  if (estimate.key !== estimateKey) setEstimate(makeEstimate());
   const router = useRouter();
   const active = data.queued > 0 || data.review > 0;
   useEffect(() => {
     const tick = () => {
       if (document.visibilityState === "visible") {
         setNow(Date.now());
-        if (active) router.refresh();
       }
     };
-    const interval = setInterval(tick, 5000);
+    tick();
+    const interval = setInterval(tick, 1000);
     document.addEventListener("visibilitychange", tick);
     return () => {
       clearInterval(interval);
       document.removeEventListener("visibilitychange", tick);
     };
+  }, []);
+  useEffect(() => {
+    if (!active) return;
+    const refresh = () => {
+      if (document.visibilityState === "visible") router.refresh();
+    };
+    const interval = setInterval(refresh, 5000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", refresh);
+    };
   }, [active, router]);
+  const seconds = Math.max(0, Math.ceil((estimate.endAt - now) / 1000));
   const range =
     now !== null
       ? remainingRange(data.outstanding, data.nextSendAt, now)
@@ -59,7 +85,10 @@ export function CampaignProgress({ data }: { data: CampaignProgressData }) {
         queued={data.queued}
         failed={data.failed}
         review={data.review}
-        seconds={estimateSeconds(data.outstanding, data.nextSendAt, now)}
+        seconds={seconds}
+        countdownProgress={
+          estimate.duration ? Math.min(1, seconds / estimate.duration) : 0
+        }
       />
       {(data.review > 0 || data.pendingDispatch) && (
         <p className="text-sm text-warning">

@@ -108,7 +108,7 @@ export default async function Home({
               </div>
               <div className="border-t border-border bg-background px-6 py-4 text-xs text-body">
                 <Check className="mr-2 inline size-3" aria-hidden="true" />
-                One recipient. One individual email.
+                One email per recipient.
               </div>
             </div>
           </div>

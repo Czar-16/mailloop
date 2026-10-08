@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Send, Paperclip, ArrowRight } from "lucide-react";
+import { Send, Paperclip, ArrowRight, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { renderTemplate } from "@/lib/validation";
@@ -29,7 +29,7 @@ export function Compose({
   resume,
   connected,
   roles,
-  resumeUrl,
+  linkUrl,
 }: {
   templates: { id: string; name: string; subject: string; body: string }[];
   contacts: ComposeContact[];
@@ -37,7 +37,7 @@ export function Compose({
   resume: string | null;
   connected: boolean;
   roles: string[];
-  resumeUrl: string | null;
+  linkUrl: string | null;
 }) {
   const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
   const [selected, setSelected] = useState<ComposeContact[]>([]);
@@ -46,7 +46,7 @@ export function Compose({
   const [recipientRoles, setRecipientRoles] = useState<Record<string, string>>(
     {},
   );
-  const [attachResume, setAttachResume] = useState(!!resume && !resumeUrl);
+  const [attachResume, setAttachResume] = useState(!!resume && !linkUrl);
   const getRole = (c: ComposeContact) =>
     recipientRoles[c.id] ?? c.jobRole ?? "";
 
@@ -65,6 +65,18 @@ export function Compose({
   const included = selected.filter(
     (c) => !c.blocked && (!c.previouslySent || resendIds.includes(c.id)),
   );
+  const filteredContacts = contacts.filter(
+    (c) => !roleFilter || getRole(c) === roleFilter,
+  );
+  const bulkEligible = filteredContacts.filter(
+    (c) => !c.blocked && !c.previouslySent,
+  );
+  const selectedIds = new Set(selected.map((c) => c.id));
+  const hasFilteredSelection = bulkEligible.some((c) => selectedIds.has(c.id));
+  const allSelected =
+    bulkEligible.length > 0 &&
+    (bulkEligible.every((c) => selectedIds.has(c.id)) ||
+      (selected.length >= 15 && hasFilteredSelection));
   useUnsavedChanges(selected.length > 0 && !result?.ok, true);
   function toggle(contact: ComposeContact) {
     setResult(undefined);
@@ -149,9 +161,8 @@ export function Compose({
             )}
             <p className="mt-2 text-xs text-body">
               Enter actual values here. Templates use{" "}
-              {"{{name}}, {{company}}, {{role}}, and {{resume_link}}"}. Each
-              recipient keeps their own role; overrides apply only to this
-              batch.
+              {"{{name}}, {{company}}, {{role}}, and {{link}}"}. Each recipient
+              keeps their own role; overrides apply only to this batch.
             </p>
             <RoleChoices
               roles={roles}
@@ -208,8 +219,41 @@ export function Compose({
                 ))}
             </select>
           </label>
+          <div className="mb-4 flex flex-wrap items-center gap-3">
+            <Button
+              variant="outline"
+              disabled={
+                pending ||
+                !bulkEligible.length ||
+                (!allSelected && selected.length >= 15)
+              }
+              onClick={() => {
+                if (allSelected) {
+                  const filteredIds = new Set(
+                    filteredContacts.map((c) => c.id),
+                  );
+                  setSelected(selected.filter((c) => !filteredIds.has(c.id)));
+                  setResendIds(resendIds.filter((id) => !filteredIds.has(id)));
+                } else {
+                  setSelected([
+                    ...selected,
+                    ...bulkEligible
+                      .filter((c) => !selectedIds.has(c.id))
+                      .slice(0, 15 - selected.length),
+                  ]);
+                }
+                setResult(undefined);
+                setKey("");
+              }}
+            >
+              {allSelected ? "Clear selection" : "Select all"}
+            </Button>
+            <span className="text-xs text-body">
+              Up to 15 eligible contacts in this filter
+            </span>
+          </div>
           <div className="space-y-3">
-            {!contacts.length && (
+            {!filteredContacts.length && (
               <p className="py-6 text-sm text-body">
                 No matching contacts.{" "}
                 <Link href="/contacts" className="text-link">
@@ -218,61 +262,59 @@ export function Compose({
                 or change your search.
               </p>
             )}
-            {contacts
-              .filter((c) => !roleFilter || getRole(c) === roleFilter)
-              .map((c) => {
-                const checked = selected.some((s) => s.id === c.id);
-                return (
-                  <div
-                    key={c.id}
-                    className="rounded-[14px] border border-border bg-surface p-3"
+            {filteredContacts.map((c) => {
+              const checked = selected.some((s) => s.id === c.id);
+              return (
+                <div
+                  key={c.id}
+                  className="rounded-[14px] border border-border bg-surface p-3"
+                >
+                  <label
+                    className={`flex min-h-11 items-center gap-3 ${c.blocked ? "opacity-60" : "cursor-pointer"}`}
                   >
-                    <label
-                      className={`flex min-h-11 items-center gap-3 ${c.blocked ? "opacity-60" : "cursor-pointer"}`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggle(c)}
-                        disabled={
-                          pending ||
-                          c.blocked ||
-                          (!checked && selected.length >= 15)
-                        }
-                      />
-                      <span className="min-w-0 flex-1">
-                        <span className="block break-words text-sm font-medium">
-                          {c.name}{" "}
-                          <span className="font-normal text-body">
-                            {c.company && `· ${c.company}`}
-                          </span>
-                        </span>
-                        <span className="block break-all text-xs text-body">
-                          {c.email}
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggle(c)}
+                      disabled={
+                        pending ||
+                        c.blocked ||
+                        (!checked && selected.length >= 15)
+                      }
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block break-words text-sm font-medium">
+                        {c.name}{" "}
+                        <span className="font-normal text-body">
+                          {c.company && `· ${c.company}`}
                         </span>
                       </span>
-                    </label>
+                      <span className="block break-all text-xs text-body">
+                        {c.email}
+                      </span>
+                    </span>
+                  </label>
+                  <p className="ml-7 text-xs text-body">
+                    {getRole(c) || "Choose a job role before sending"}
+                  </p>
+                  {c.lastSent && (
                     <p className="ml-7 text-xs text-body">
-                      {getRole(c) || "Choose a job role before sending"}
+                      Last Sent: <DateTime value={c.lastSent} />
                     </p>
-                    {c.lastSent && (
-                      <p className="ml-7 text-xs text-body">
-                        Last Sent: <DateTime value={c.lastSent} />
-                      </p>
-                    )}
-                    {c.blocked && (
-                      <p className="ml-7 text-xs text-warning">
-                        Already queued or awaiting delivery confirmation
-                      </p>
-                    )}
-                    {c.previouslySent && !c.blocked && (
-                      <p className="status-pill status-queued ml-7 mt-2">
-                        Previously contacted · skipped by default
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
+                  )}
+                  {c.blocked && (
+                    <p className="ml-7 text-xs text-warning">
+                      Already queued or awaiting delivery confirmation
+                    </p>
+                  )}
+                  {c.previouslySent && !c.blocked && (
+                    <p className="status-pill status-queued ml-7 mt-2">
+                      Previously contacted · skipped by default
+                    </p>
+                  )}
+                </div>
+              );
+            })}
           </div>
           {selected.some((c) => !contacts.some((v) => v.id === c.id)) && (
             <p className="mt-4 text-xs text-body">
@@ -376,7 +418,7 @@ export function Compose({
                   name: preview.name,
                   company: preview.company,
                   role: getRole(preview),
-                  resume_link: resumeUrl,
+                  link: linkUrl,
                 })}
               </h2>
               <p className="min-h-40 whitespace-pre-wrap break-words">
@@ -384,19 +426,19 @@ export function Compose({
                   name: preview.name,
                   company: preview.company,
                   role: getRole(preview),
-                  resume_link: resumeUrl,
+                  link: linkUrl,
                 })
-                  .split(resumeUrl || "\u0000")
+                  .split(linkUrl || "\u0000")
                   .map((part, i) => (
                     <span key={i}>
-                      {i > 0 && resumeUrl && (
+                      {i > 0 && linkUrl && (
                         <a
-                          href={resumeUrl}
+                          href={linkUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-link"
                         >
-                          {resumeUrl}
+                          {linkUrl}
                         </a>
                       )}
                       {part}
@@ -418,7 +460,12 @@ export function Compose({
           <div className="pt-3">
             <p className="flex items-center gap-2 break-all text-xs text-body">
               <Paperclip className="size-4 shrink-0" aria-hidden="true" />
-              {attachResume ? resume : "No PDF attachment"}
+              <span
+                className="min-w-0 truncate"
+                title={attachResume ? (resume ?? undefined) : undefined}
+              >
+                {attachResume ? resume : "No PDF attachment"}
+              </span>
               <Link href="/settings" className="ml-auto text-link">
                 Settings
               </Link>
@@ -438,34 +485,64 @@ export function Compose({
             Estimate for selected recipients at 20–60 seconds between sends.
             This is not a delivery confirmation.
           </p>
-          <label className="flex min-h-11 items-center gap-3 text-sm">
-            <input
-              type="checkbox"
-              name="attachResume"
-              checked={attachResume}
-              disabled={pending || !resume}
-              onChange={(e) => {
-                setAttachResume(e.target.checked);
-                setKey("");
-              }}
-            />
-            Attach Resume{!resume && " (upload a PDF in Settings)"}
-          </label>
-          <p className="break-words text-xs text-body">
-            PDF: {attachResume ? resume : "None"}. Resume link:{" "}
-            {/\{\{\s*resume_link\s*\}\}/.test(template?.body ?? "")
-              ? resumeUrl || "Missing — save URL in Settings"
-              : "Not included by this template"}
-            .
-          </p>
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-body">Individual emails</span>
-            <span className="font-medium tabular-nums">{included.length}</span>
+          <div className="space-y-3">
+            <label className="flex min-h-11 items-center gap-3 text-sm">
+              <input
+                type="checkbox"
+                name="attachResume"
+                checked={attachResume}
+                disabled={pending || !resume}
+                onChange={(e) => {
+                  setAttachResume(e.target.checked);
+                  setKey("");
+                }}
+              />
+              Attach Resume{!resume && " (upload a PDF in Settings)"}
+            </label>
+            <p className="flex min-w-0 items-center gap-2 text-xs text-body">
+              <FileText className="size-4 shrink-0" aria-hidden="true" />
+              <span className="min-w-0 truncate" title={resume ?? undefined}>
+                {resume ?? "No PDF uploaded"}
+              </span>
+            </p>
+            <span className="inline-block max-w-full break-words rounded-full bg-[var(--accent-soft)] px-3 py-1 text-xs text-body">
+              Link:{" "}
+              {/\{\{\s*link\s*\}\}/.test(template?.body ?? "")
+                ? linkUrl
+                  ? "included"
+                  : "missing — save URL in Settings"
+                : "not in this template"}
+            </span>
           </div>
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-body">Last 24 hours + queued</span>
-            <span className="tabular-nums">{used} / 500</span>
-          </div>
+          {[
+            { label: "Selected recipients", value: included.length, max: 15 },
+            { label: "Last 24 hours + queued", value: used, max: 500 },
+          ].map(({ label, value, max }) => (
+            <div key={label} className="space-y-2">
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="text-body">{label}</span>
+                <span className="font-medium tabular-nums">
+                  {value} / {max}
+                </span>
+              </div>
+              <div
+                role="progressbar"
+                aria-label={label}
+                aria-valuemin={0}
+                aria-valuemax={max}
+                aria-valuenow={Math.min(value, max)}
+                aria-valuetext={`${value} / ${max}`}
+                className="h-2 overflow-hidden rounded-full bg-surface"
+              >
+                <div
+                  className="queue-meter h-full rounded-full"
+                  style={{
+                    width: `${Math.min(100, Math.max(0, (value / max) * 100))}%`,
+                  }}
+                />
+              </div>
+            </div>
+          ))}
           <p className="text-xs leading-5 text-body">
             Each recipient gets a separate email from your Gmail. Sends are
             spaced 20–60 seconds apart.
@@ -506,11 +583,10 @@ export function Compose({
                 });
                 return;
               }
-              if (/{{\s*resume_link\s*}}/.test(template.body) && !resumeUrl) {
+              if (/{{\s*link\s*}}/.test(template.body) && !linkUrl) {
                 setResult({
                   ok: false,
-                  message:
-                    "Save a resume URL in Settings before using this template.",
+                  message: "Save a URL in Settings before using this template.",
                 });
                 return;
               }
@@ -542,7 +618,7 @@ export function Compose({
             <Send aria-hidden="true" />
             {pending
               ? "Queuing…"
-              : `Send ${included.length || ""} Individual Email${included.length === 1 ? "" : "s"}`}
+              : `Send to ${included.length} recipient${included.length === 1 ? "" : "s"}`}
           </Button>
         </section>
       </aside>

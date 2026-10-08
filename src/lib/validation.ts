@@ -31,18 +31,18 @@ export const templateSchema = z
               "name",
               "company",
               "role",
-              ...(field === "body" ? ["resume_link"] : []),
+              ...(field === "body" ? ["link"] : []),
             ].includes(t[1].trim()),
         ) ||
         /{{|}}/.test(
-          v[field].replace(/{{\s*(name|company|role|resume_link)\s*}}/g, ""),
+          v[field].replace(/{{\s*(name|company|role|link)\s*}}/g, ""),
         )
       ) {
         ctx.addIssue({
           code: "custom",
           path: [field],
           message:
-            "Use {{name}}, {{company}}, {{role}}, and {{resume_link}} (body only).",
+            "Use {{name}}, {{company}}, {{role}}, and {{link}} (body only).",
         });
       }
     }
@@ -67,11 +67,11 @@ export function renderTemplate(
     name: string;
     company?: string | null;
     role: string;
-    resume_link?: string | null;
+    link?: string | null;
   },
 ) {
   return text.replace(
-    /{{\s*(name|company|role|resume_link)\s*}}/g,
+    /{{\s*(name|company|role|link)\s*}}/g,
     (_, key: keyof typeof values) => values[key] ?? "",
   );
 }
@@ -94,7 +94,7 @@ export const preferredRolesSchema = z
     (v) => new Set(v.map((r) => r.toLowerCase())).size === v.length,
     "Choose unique roles.",
   );
-export const resumeUrlSchema = z
+export const linkUrlSchema = z
   .string()
   .trim()
   .max(2048)
@@ -106,4 +106,4 @@ export const resumeUrlSchema = z
     } catch {
       return false;
     }
-  }, "Enter an HTTPS resume URL.");
+  }, "Enter an HTTPS URL.");

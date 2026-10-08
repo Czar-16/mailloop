@@ -5,7 +5,7 @@ const values = {
   name: "Alex Smith",
   company: null,
   role: "Engineer",
-  resume_link: "https://example.test/resume",
+  link: "https://example.test/resume",
 };
 describe("template preview mirrors send substitutions", () => {
   it("fills full names, whitespace, repeated tokens, and absent optional values", () => {
@@ -29,12 +29,12 @@ describe("template preview mirrors send substitutions", () => {
       ).toBe(true);
     }
   });
-  it("allows the resume link only in the body and keeps markup as plain text", () => {
-    expect(previewParts("{{resume_link}}", values, false).errors[0]).toContain(
+  it("allows the link only in the body and keeps markup as plain text", () => {
+    expect(previewParts("{{link}}", values, false).errors[0]).toContain(
       "body only",
     );
-    expect(previewParts("{{resume_link}}", values, true).parts[0].text).toBe(
-      values.resume_link,
+    expect(previewParts("{{link}}", values, true).parts[0].text).toBe(
+      values.link,
     );
     expect(
       previewParts(

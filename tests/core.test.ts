@@ -8,7 +8,7 @@ import {
   validatePdf,
   MAX_PDF_BYTES,
   preferredRolesSchema,
-  resumeUrlSchema,
+  linkUrlSchema,
 } from "@/lib/validation";
 import { parseContacts, suggestName, validateImportRows } from "@/lib/imports";
 
@@ -134,32 +134,32 @@ describe("outreach preferences and email lists", () => {
       "javascript:alert(1)",
       "https://user:pass@example.com",
     ])
-      expect(resumeUrlSchema.safeParse(url).success).toBe(false);
-    expect(resumeUrlSchema.parse("https://example.com/resume")).toContain(
+      expect(linkUrlSchema.safeParse(url).success).toBe(false);
+    expect(linkUrlSchema.parse("https://example.com/portfolio")).toContain(
       "https:",
     );
-    expect(resumeUrlSchema.parse("")).toBe("");
+    expect(linkUrlSchema.parse("")).toBe("");
   });
-  it("allows resume links only in template bodies and renders literally", () => {
+  it("allows links only in template bodies and renders literally", () => {
     expect(
       templateSchema.safeParse({
-        name: "Resume",
+        name: "Portfolio",
         subject: "Hi",
-        body: "{{resume_link}}",
+        body: "{{link}}",
       }).success,
     ).toBe(true);
     expect(
       templateSchema.safeParse({
-        name: "Resume",
-        subject: "{{resume_link}}",
+        name: "Portfolio",
+        subject: "{{link}}",
         body: "Hi",
       }).success,
     ).toBe(false);
     expect(
-      renderTemplate("{{resume_link}}", {
+      renderTemplate("{{link}}", {
         name: "A",
         role: "Engineer",
-        resume_link: "https://example.com/$&",
+        link: "https://example.com/$&",
       }),
     ).toBe("https://example.com/$&");
   });
