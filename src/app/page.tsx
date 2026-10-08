@@ -28,7 +28,7 @@ export default async function Home({
   return (
     <>
       <header className="border-b border-border">
-        <div className="page-container flex items-center justify-between py-4">
+        <div className="page-container flex flex-wrap items-center justify-between gap-3 py-4">
           <Wordmark />
           <ThemeControl />
           <form action={googleSignIn}>
@@ -75,7 +75,7 @@ export default async function Home({
                 Your Gmail. Your resume. Your next chapter.
               </p>
             </div>
-            <div className="panel overflow-hidden shadow-[0_1px_1px_rgba(0,0,0,0.04)]">
+            <div className="panel overflow-hidden">
               <div className="flex items-center justify-between border-b border-border px-6 py-4">
                 <span className="eyebrow">A personal introduction</span>
                 <span className="text-xs text-body">Preview</span>

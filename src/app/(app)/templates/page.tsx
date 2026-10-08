@@ -15,7 +15,7 @@ export default async function Templates({
   const params = await searchParams;
   const page = pageNumber(params.page);
   const where = { userId: user.id, archivedAt: null };
-  const [templates, total, editing] = await Promise.all([
+  const [templates, total, editing, contacts] = await Promise.all([
     db.template.findMany({
       where,
       orderBy: { createdAt: "desc" },
@@ -26,15 +26,33 @@ export default async function Templates({
     params.edit
       ? db.template.findFirst({ where: { ...where, id: params.edit } })
       : null,
+    db.contact.findMany({
+      where: { userId: user.id, archivedAt: null },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        company: true,
+        jobRole: true,
+      },
+      orderBy: { name: "asc" },
+    }),
   ]);
   return (
     <>
       <PageHeading
-        eyebrow="Your words, ready to go"
-        title="Templates"
-        description="Start with a good introduction. Make it personal for every recipient."
+        eyebrow="Templates"
+        title="Write once, personalise for everyone."
+        description="Type on the left. The real email updates live on the right."
       />
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
+      <TemplateForm
+        key={editing?.id ?? "new"}
+        template={editing ?? undefined}
+        contacts={contacts}
+        resumeUrl={user.resumeUrl}
+      />
+      <div className="mt-8">
+        <h2 className="section-label mb-4">Saved templates</h2>
         <section className="space-y-4">
           {!templates.length ? (
             <EmptyState
@@ -71,10 +89,6 @@ export default async function Templates({
           )}
           <Pagination path="/templates" page={page} total={total} />
         </section>
-        <TemplateForm
-          key={editing?.id ?? "new"}
-          template={editing ?? undefined}
-        />
       </div>
     </>
   );

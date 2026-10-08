@@ -26,7 +26,7 @@ export function Resume({
   return (
     <section className="panel space-y-5 p-6">
       <div>
-        <h2 className="text-xl font-semibold tracking-tight">Your Resume</h2>
+        <h2 className="section-label">Resume PDF</h2>
         <p className="mt-2 text-sm leading-6 text-body">
           One PDF, attached to every new email. Optional, up to 5 MB. Queued
           emails retain the resume you selected when sending.

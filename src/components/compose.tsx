@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { renderTemplate } from "@/lib/validation";
 import { submitCampaign } from "@/lib/actions";
 import { Feedback, useUnsavedChanges } from "@/components/forms";
+import { ProgressRing, estimateSeconds } from "@/components/progress-ring";
 import { DateTime } from "@/components/date-time";
 import { RoleChoices } from "@/components/preferences";
 import type { ActionResult } from "@/lib/errors";
@@ -74,9 +75,9 @@ export function Compose({
     setKey("");
   }
   return (
-    <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_440px]">
-      <div className="space-y-6">
-        <section className="panel space-y-5 p-6">
+    <div className="compose-grid">
+      <div className="space-y-[18px]">
+        <section className="panel space-y-4 p-5">
           <p className="eyebrow">01 / The message</p>
           <div>
             <label
@@ -179,7 +180,7 @@ export function Compose({
             </Button>
           </div>
         </section>
-        <section className="panel p-6">
+        <section className="panel p-5">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <p className="eyebrow">02 / Your shortlist</p>
             <p aria-live="polite" className="text-xs tabular-nums text-body">
@@ -195,7 +196,7 @@ export function Compose({
             <select
               aria-label="Filter by Job Role"
               name="roleFilter"
-              className="ml-2"
+              className="mt-2 w-full"
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value)}
             >
@@ -207,7 +208,7 @@ export function Compose({
                 ))}
             </select>
           </label>
-          <div className="space-y-1">
+          <div className="space-y-3">
             {!contacts.length && (
               <p className="py-6 text-sm text-body">
                 No matching contacts.{" "}
@@ -224,7 +225,7 @@ export function Compose({
                 return (
                   <div
                     key={c.id}
-                    className="rounded-sm border border-border p-3"
+                    className="rounded-[14px] border border-border bg-surface p-3"
                   >
                     <label
                       className={`flex min-h-11 items-center gap-3 ${c.blocked ? "opacity-60" : "cursor-pointer"}`}
@@ -265,7 +266,7 @@ export function Compose({
                       </p>
                     )}
                     {c.previouslySent && !c.blocked && (
-                      <p className="ml-7 text-xs text-warning">
+                      <p className="status-pill status-queued ml-7 mt-2">
                         Previously contacted · skipped by default
                       </p>
                     )}
@@ -307,7 +308,7 @@ export function Compose({
           </section>
         )}
         {selected.some((c) => c.previouslySent) && (
-          <section className="panel p-6">
+          <section className="panel p-5">
             <h2 className="text-sm font-medium">
               Allow intentional follow-ups
             </h2>
@@ -342,10 +343,13 @@ export function Compose({
         )}
       </div>
       <aside className="space-y-4 lg:sticky lg:top-6">
-        <section className="panel overflow-hidden">
-          <div className="border-b border-border p-6">
-            <p className="eyebrow mb-4">03 / A personal preview</p>
-            <label htmlFor="preview-recipient" className="sr-only">
+        <section className="panel p-5">
+          <div className="mb-3">
+            <p className="section-label mb-4">03 / Personal preview</p>
+            <label
+              htmlFor="preview-recipient"
+              className="mb-2 block text-sm font-medium"
+            >
               Preview recipient
             </label>
             <select
@@ -365,7 +369,7 @@ export function Compose({
             </select>
           </div>
           {template && preview ? (
-            <div className="space-y-4 p-6 text-sm leading-6">
+            <div className="mail-preview space-y-4 p-4 text-sm leading-6">
               <p className="break-all text-body">To: {preview.email}</p>
               <h2 className="break-words border-b border-border pb-4 font-medium">
                 {renderTemplate(template.subject, {
@@ -411,7 +415,7 @@ export function Compose({
               email.
             </p>
           )}
-          <div className="border-t border-border bg-background px-6 py-4">
+          <div className="pt-3">
             <p className="flex items-center gap-2 break-all text-xs text-body">
               <Paperclip className="size-4 shrink-0" aria-hidden="true" />
               {attachResume ? resume : "No PDF attachment"}
@@ -421,7 +425,19 @@ export function Compose({
             </p>
           </div>
         </section>
-        <section className="panel space-y-4 p-6">
+        <section className="panel space-y-4 p-5">
+          <h2 className="section-label">Send queue</h2>
+          <ProgressRing
+            sent={0}
+            queued={included.length}
+            failed={0}
+            seconds={estimateSeconds(included.length)}
+            draft
+          />
+          <p className="text-xs text-body">
+            Estimate for selected recipients at 20–60 seconds between sends.
+            This is not a delivery confirmation.
+          </p>
           <label className="flex min-h-11 items-center gap-3 text-sm">
             <input
               type="checkbox"

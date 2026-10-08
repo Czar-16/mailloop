@@ -25,9 +25,7 @@ export default async function Settings() {
       <Preferences roles={user.preferredRoles} resumeUrl={user.resumeUrl} />
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
         <section className="panel space-y-5 p-6">
-          <h2 className="text-xl font-semibold tracking-tight">
-            Gmail Connection
-          </h2>
+          <h2 className="section-label">Account · Gmail connection</h2>
           <div className="rounded-sm border border-border p-4">
             <p className="break-all text-sm font-medium">{user.email}</p>
             <p
@@ -57,10 +55,6 @@ export default async function Settings() {
           >
             Manage Access in Google
           </a>
-          <div className="border-t border-border pt-4 text-xs leading-5 text-body">
-            Your limit is 500 emails in a rolling 24 hours, including reserved
-            queue capacity. Gmail may enforce additional limits.
-          </div>
         </section>
         <Resume
           userId={user.id}
@@ -71,6 +65,18 @@ export default async function Settings() {
           }
         />
       </div>
+      <section className="panel mt-6 space-y-3 p-6">
+        <h2 className="section-label">Sending</h2>
+        <p className="text-sm text-body">
+          Your limit is 500 individual emails in a rolling 24 hours, including
+          reserved queue capacity. Select up to 15 recipients per batch. Sends
+          are spaced 20–60 seconds apart.
+        </p>
+        <p className="text-xs text-body">
+          Gmail may enforce additional limits. Estimated queue times do not
+          confirm delivery.
+        </p>
+      </section>
     </>
   );
 }

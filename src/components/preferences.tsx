@@ -29,7 +29,7 @@ export function RoleChoices({
           key={role}
           type="button"
           variant="outline"
-          className="h-auto max-w-full whitespace-normal break-words py-2"
+          className="chip h-auto py-2"
           disabled={disabled}
           onClick={() => onChoose(role)}
         >
@@ -83,7 +83,7 @@ export function Preferences({
   }
   return (
     <section className="panel mb-6 space-y-4 p-6">
-      <h2 className="text-xl font-semibold">
+      <h2 className="section-label">
         {setup ? "Choose Your Preferred Roles" : "Outreach Preferences"}
       </h2>
       <p className="text-sm text-body">
@@ -96,7 +96,7 @@ export function Preferences({
           <Button
             key={v}
             variant="outline"
-            className="h-auto max-w-full whitespace-normal break-words py-2"
+            className="chip h-auto py-2"
             disabled={pending}
             onClick={() => {
               setValues(values.filter((r) => r !== v));
@@ -153,7 +153,8 @@ export function Preferences({
           Add Role
         </Button>
         {!setup && (
-          <label className="block text-sm">
+          <label className="block border-t border-border pt-4 text-sm">
+            <span className="section-label mb-2 block">Resume link</span>
             Resume URL (optional HTTPS link)
             <Input
               ref={urlInput}

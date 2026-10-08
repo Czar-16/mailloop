@@ -327,7 +327,7 @@ test("setup, name suggestion manual override, account menu, and theme persistenc
   await page.getByRole("button", { name: "Account menu" }).click();
   await page.locator("main h1").click({ position: { x: 5, y: 5 } });
   await expect(page.getByRole("menu")).toHaveCount(0);
-  await page.getByLabel("Theme", { exact: true }).selectOption("dark");
+  await page.getByRole("button", { name: "Dark theme", exact: true }).click();
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   for (const route of [
@@ -349,7 +349,7 @@ test("setup, name suggestion manual override, account menu, and theme persistenc
     ).toBe(true);
   }
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.getByLabel("Theme", { exact: true }).selectOption("light");
+  await page.getByRole("button", { name: "Light theme", exact: true }).click();
   expect(
     await page.evaluate(
       () =>
@@ -387,8 +387,8 @@ test("example template, focused placeholder insertion, pasted lists and mixed ro
   await page.getByLabel("Subject", { exact: true }).fill("Opportunity for ");
   await page.getByLabel("Subject", { exact: true }).focus();
   await page
-    .getByRole("button", { name: "Insert {{role}}", exact: true })
-    .click();
+    .getByLabel("Subject", { exact: true })
+    .fill("Opportunity for {{role}}");
   await expect(page.getByLabel("Subject", { exact: true })).toHaveValue(
     "Opportunity for {{role}}",
   );
@@ -396,7 +396,7 @@ test("example template, focused placeholder insertion, pasted lists and mixed ro
     .getByLabel("Message", { exact: true })
     .fill("Hi {{name}}, I’m applying for {{role}}. Resume: ");
   await page
-    .getByRole("button", { name: "Insert {{resume_link}}", exact: true })
+    .getByRole("button", { name: "{{resume_link}}", exact: true })
     .click();
   await page
     .getByRole("button", { name: "Save Template", exact: true })
@@ -468,7 +468,7 @@ test("example template, focused placeholder insertion, pasted lists and mixed ro
   );
   await expect(
     page.getByRole("region", { name: "Campaign delivery progress" }),
-  ).toContainText("Delivery Complete", { timeout: 15000 });
+  ).toContainText("all sent", { timeout: 15000 });
   await page.goto("/compose");
   await expect(page.getByText(/Last Sent:/).first()).toBeVisible();
 });
@@ -516,15 +516,15 @@ test("progress distinguishes uncertain outcomes and includes the user queue in e
     timeout: 15000,
   });
   await expect(card).toContainText("Retries and service delays");
-  await page.getByLabel("Theme", { exact: true }).selectOption("dark");
+  await page.getByRole("button", { name: "Dark theme", exact: true }).click();
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.emulateMedia({ reducedMotion: "reduce" });
   expect(
     await card
-      .locator(".progress-change")
+      .locator(".progress-ring circle")
       .first()
-      .evaluate((e) => getComputedStyle(e).animationDuration),
-  ).toBe("1e-05s");
+      .evaluate((e) => getComputedStyle(e).transitionDuration),
+  ).toBe("0s");
   await page.goto(`/history?campaign=${randomUUID()}`);
   await expect(
     page.getByRole("region", { name: "Campaign delivery progress" }),
@@ -613,9 +613,10 @@ test("attachment defaults, example replacement warning, and batch role filters",
   expect(saved.rows[0].jobRole).toBe("SDE Intern");
   await page.getByRole("checkbox", { name: /Alex/ }).uncheck();
   await page.goto("/");
-  await page.getByLabel("Theme", { exact: true }).selectOption("dark");
+  await page.getByRole("button", { name: "Dark theme", exact: true }).click();
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
-  await page.getByLabel("Theme", { exact: true }).selectOption("system");
+  await page.evaluate(() => localStorage.removeItem("mailloop-theme"));
+  await page.reload();
   await page.emulateMedia({ colorScheme: "light" });
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await page.emulateMedia({ colorScheme: "dark" });
@@ -652,5 +653,289 @@ base(
         }),
       ).toBeVisible();
     }
+  },
+);
+
+test("redesign: populated pages in both themes, live recipient preview, cursor insertion", async ({
+  page,
+  userId,
+}) => {
+  const templateId = randomUUID(),
+    contactId = randomUUID(),
+    campaignId = randomUUID();
+  await pool.query(
+    'UPDATE "User" SET "preferredRoles"=$2,"resumeUrl"=$3 WHERE id=$1',
+    [
+      userId,
+      ["SDE Intern", "Backend Developer"],
+      "https://example.test/resume",
+    ],
+  );
+  await pool.query(
+    'INSERT INTO "Template" (id,"userId",name,subject,body) VALUES ($1,$2,$3,$4,$5)',
+    [
+      templateId,
+      userId,
+      "Backend template",
+      "Exploring {{role}} opportunities at {{company}}",
+      "Hi {{name}},\n\nI’m interested in {{role}} opportunities at {{company}}.\n\nResume: {{resume_link}}\n\nThank you for your time.",
+    ],
+  );
+  await pool.query(
+    'INSERT INTO "Contact" (id,"userId",name,email,company,"jobRole") VALUES ($1,$2,$3,$4,$5,$6)',
+    [
+      contactId,
+      userId,
+      "Anoop Jha",
+      "anoop@example.test",
+      "Mailloop",
+      "SDE Intern",
+    ],
+  );
+  await pool.query(
+    'INSERT INTO "Campaign" (id,"userId","templateId",status) VALUES ($1,$2,$3,$4)',
+    [campaignId, userId, templateId, "QUEUED"],
+  );
+  for (const status of ["SENT", "QUEUED", "FAILED"])
+    await pool.query(
+      'INSERT INTO "Send" (id,"campaignId","contactId",status,"recipientName","recipientEmail","recipientCompany","templateName","sentAt",error) VALUES ($1,$2,$3,$4::"SendStatus",$5,$6,$7,$8,$9,$10)',
+      [
+        randomUUID(),
+        campaignId,
+        contactId,
+        status,
+        "Anoop Jha",
+        "anoop@example.test",
+        "Mailloop",
+        "Backend template",
+        status === "SENT" ? new Date() : null,
+        status === "FAILED" ? "Recipient address rejected" : null,
+      ],
+    );
+  for (const theme of ["light", "dark"] as const) {
+    await page.goto("/compose");
+    await page
+      .getByRole("button", {
+        name: `${theme === "light" ? "Light" : "Dark"} theme`,
+        exact: true,
+      })
+      .click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+    for (const route of [
+      "compose",
+      "templates",
+      "history",
+      "contacts",
+      "settings",
+    ]) {
+      const query =
+        route === "templates"
+          ? `?edit=${templateId}`
+          : route === "history"
+            ? `?campaign=${campaignId}`
+            : "";
+      await page.goto(`/${route}${query}`);
+      await expect(page.locator("main h1")).toBeVisible();
+      expect(
+        (await new AxeBuilder({ page }).analyze()).violations,
+        `${route}/${theme}`,
+      ).toEqual([]);
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth + 1,
+        ),
+        `${route}/${theme}`,
+      ).toBe(true);
+      await page.screenshot({
+        path: `/tmp/mailloop-redesign-${route}-${theme}-${test.info().project.name}.png`,
+        fullPage: true,
+      });
+    }
+  }
+  await page.goto(`/templates?edit=${templateId}`);
+  const preview = page.getByRole("complementary", {
+    name: "Live email preview",
+  });
+  await expect(
+    preview.locator("mark").filter({ hasText: "Anoop Jha" }),
+  ).toBeVisible();
+  await page
+    .getByLabel("Message", { exact: true })
+    .fill("Hello {{nmae}} and {{role");
+  await expect(preview.getByRole("status")).toContainText(
+    "Unknown placeholder: {{nmae}}",
+  );
+  await expect(preview.getByRole("status")).toContainText("not closed");
+  await expect(preview.locator("mark.invalid")).toHaveCount(2);
+  const message = page.getByLabel("Message", { exact: true });
+  await message.fill("Hello friend!");
+  await message.evaluate((element: HTMLTextAreaElement) => {
+    element.focus();
+    element.setSelectionRange(6, 12);
+    element.dispatchEvent(new Event("select", { bubbles: true }));
+  });
+  await page.getByRole("button", { name: "{{name}}", exact: true }).click();
+  await expect(message).toHaveValue("Hello {{name}}!");
+  await expect(message).toBeFocused();
+  await expect(preview).toContainText("Hello Anoop Jha!");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.getByRole("button", { name: "Light theme", exact: true }).click();
+  expect(
+    await page
+      .locator(".theme-thumb")
+      .evaluate((element) => getComputedStyle(element).transitionDuration),
+  ).toBe("0s");
+});
+
+base(
+  "theme: system default, reveal, rapid clicks, storage events and reduced motion",
+  async ({ page }) => {
+    await page.emulateMedia({
+      colorScheme: "dark",
+      reducedMotion: "no-preference",
+    });
+    await page.addInitScript(() => {
+      const seen: string[] = [];
+      Object.assign(window, { initialThemes: seen });
+      new MutationObserver(() => {
+        const theme = document.documentElement?.dataset.theme;
+        if (theme) seen.push(theme);
+      }).observe(document, {
+        attributes: true,
+        attributeFilter: ["data-theme"],
+        subtree: true,
+      });
+    });
+    await page.goto("/");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    expect(
+      await page.evaluate(
+        () =>
+          (window as typeof window & { initialThemes: string[] })
+            .initialThemes[0],
+      ),
+    ).toBe("dark");
+    await page
+      .getByRole("banner")
+      .getByRole("button", { name: "Light theme", exact: true })
+      .click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    if (
+      await page.evaluate(
+        () => typeof document.startViewTransition === "function",
+      )
+    ) {
+      await expect
+        .poll(() =>
+          page.evaluate(() =>
+            document
+              .getAnimations()
+              .some((animation) =>
+                (animation.effect as KeyframeEffect)
+                  .getKeyframes()
+                  .some(
+                    (frame) =>
+                      typeof frame.clipPath === "string" &&
+                      frame.clipPath.startsWith("circle("),
+                  ),
+              ),
+          ),
+        )
+        .toBe(true);
+    }
+    await page.evaluate(() => {
+      const dark = document.querySelector<HTMLButtonElement>(
+        '[aria-label="Dark theme"]',
+      )!;
+      const light = document.querySelector<HTMLButtonElement>(
+        '[aria-label="Light theme"]',
+      )!;
+      dark.click();
+      light.click();
+      dark.click();
+    });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await page.reload();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await page.evaluate(() => {
+      localStorage.setItem("mailloop-theme", "light");
+      window.dispatchEvent(
+        new StorageEvent("storage", {
+          key: "mailloop-theme",
+          newValue: "light",
+        }),
+      );
+    });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page
+      .getByRole("banner")
+      .getByRole("button", { name: "Dark theme", exact: true })
+      .click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    expect(
+      await page
+        .getByRole("banner")
+        .locator(".theme-thumb")
+        .evaluate((element) => getComputedStyle(element).transitionDuration),
+    ).toBe("0s");
+    expect(
+      await page.evaluate(() =>
+        document
+          .getAnimations()
+          .some((animation) =>
+            (animation.effect as KeyframeEffect)
+              .getKeyframes()
+              .some(
+                (frame) =>
+                  typeof frame.clipPath === "string" &&
+                  frame.clipPath.startsWith("circle("),
+              ),
+          ),
+      ),
+    ).toBe(false);
+  },
+);
+
+base(
+  "theme: unavailable storage and unsupported view transitions switch instantly",
+  async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.addInitScript(() => {
+      Object.defineProperty(document, "startViewTransition", {
+        value: undefined,
+      });
+      Storage.prototype.getItem = () => {
+        throw new Error("Storage unavailable");
+      };
+      Storage.prototype.setItem = () => {
+        throw new Error("Storage unavailable");
+      };
+    });
+    await page.goto("/");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await page
+      .getByRole("banner")
+      .getByRole("button", { name: "Dark theme", exact: true })
+      .click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.emulateMedia({ colorScheme: "light" });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    expect(
+      await page.evaluate(() =>
+        document
+          .getAnimations()
+          .some((animation) =>
+            (animation.effect as KeyframeEffect)
+              .getKeyframes()
+              .some(
+                (frame) =>
+                  typeof frame.clipPath === "string" &&
+                  frame.clipPath.startsWith("circle("),
+              ),
+          ),
+      ),
+    ).toBe(false);
   },
 );

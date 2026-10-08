@@ -102,8 +102,14 @@ export default async function ComposePage({
         title="Make your next connection."
         description="Choose your words, build a shortlist, and see exactly what each person will receive."
       />
-      <Form action="/compose" className="mb-6 flex max-w-xl gap-2">
-        <label htmlFor="compose-search" className="sr-only">
+      <Form
+        action="/compose"
+        className="mb-[18px] grid grid-cols-[minmax(0,1fr)_auto] gap-2"
+      >
+        <label
+          htmlFor="compose-search"
+          className="col-span-2 text-xs font-medium"
+        >
           Search recipients
         </label>
         <Input

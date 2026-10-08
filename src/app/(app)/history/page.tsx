@@ -155,7 +155,6 @@ export default async function History({
           />
         }
       />
-      {progress && <CampaignProgress data={progress} />}
       <div className="mb-8 grid gap-4 sm:grid-cols-3">
         {[
           {
@@ -164,9 +163,9 @@ export default async function History({
             note: `UTC day · ${used} / 500 used or reserved in 24h`,
           },
           {
-            label: "Total Sent",
-            value: allTime,
-            note: "Individual emails delivered through Mailloop",
+            label: "In queue",
+            value: queued,
+            note: `${allTime} sent in total · sends spaced 20–60 seconds apart`,
           },
           {
             label: "Replies",
@@ -176,13 +175,16 @@ export default async function History({
         ].map((s) => (
           <div key={s.label} className="panel p-6">
             <p className="text-sm text-body">{s.label}</p>
-            <p className="mt-3 text-[32px] font-semibold tracking-tight tabular-nums">
+            <p
+              className={`mt-3 text-[34px] font-bold tracking-tight tabular-nums ${s.label === "In queue" ? "text-warning" : ""}`}
+            >
               {new Intl.NumberFormat("en").format(s.value)}
             </p>
             <p className="mt-2 text-xs leading-5 text-body">{s.note}</p>
           </div>
         ))}
       </div>
+      {progress && <CampaignProgress data={progress} />}
       <form
         method="get"
         action="/history"
@@ -274,7 +276,7 @@ export default async function History({
                       <Status status={s.status} />
                     )}
                     {s.error && (
-                      <p className="mt-2 max-w-64 break-words text-xs leading-5 text-warning">
+                      <p className="mt-2 max-w-64 break-words text-xs leading-5 text-error-deep">
                         {s.error}
                       </p>
                     )}

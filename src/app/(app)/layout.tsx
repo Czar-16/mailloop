@@ -15,8 +15,8 @@ export default async function AppLayout({
   const user = await requireUser();
   return (
     <>
-      <header className="border-b border-border bg-card">
-        <div className="page-container flex flex-wrap items-center justify-between gap-3 py-4">
+      <header className="">
+        <div className="page-container flex flex-wrap items-center justify-between gap-3 pt-[18px]">
           <Wordmark />
           <div className="flex min-w-0 items-center gap-3">
             <ThemeControl />
@@ -30,12 +30,12 @@ export default async function AppLayout({
               }}
             />
           </div>
-          <div className="w-full pt-1">
+          <div className="w-full pt-1 pb-0">
             <Navigation />
           </div>
         </div>
       </header>
-      <main id="main-content" className="page-container py-10 sm:py-12">
+      <main id="main-content" className="page-container pt-[26px] pb-[60px]">
         {!user.preferredRoles.length && (
           <RoleSetup resumeUrl={user.resumeUrl} />
         )}

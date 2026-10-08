@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ProgressRing, estimateSeconds } from "@/components/progress-ring";
 import { remainingRange } from "@/lib/progress";
 export type CampaignProgressData = {
   id: string;
@@ -47,47 +48,26 @@ export function CampaignProgress({ data }: { data: CampaignProgressData }) {
         1000,
     ),
   );
-  const total = data.queued + data.sent + data.failed + data.review;
   return (
     <section
-      className="panel mb-6 space-y-4 p-6"
+      className="panel mb-[18px] space-y-4 p-5"
       aria-label="Campaign delivery progress"
     >
-      <h2 className="text-xl font-semibold">
-        {data.review
-          ? "Delivery needs review"
-          : data.pendingDispatch
-            ? "Waiting for delivery service"
-            : data.queued
-              ? "Sending Your Introductions"
-              : data.failed
-                ? "Delivery Finished with Failures"
-                : "Delivery Complete"}
-      </h2>
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4" aria-live="polite">
-        {[
-          ["Queued", data.queued],
-          ["Sent", data.sent],
-          ["Failed", data.failed],
-          ["Delivery Review", data.review],
-        ].map(([label, count]) => (
-          <p
-            key={`${label}-${count}`}
-            className="progress-change text-sm text-body"
-          >
-            {label}
-            <span className="mt-1 block text-2xl font-semibold tabular-nums text-foreground">
-              {count}
-            </span>
-          </p>
-        ))}
-      </div>
-      <progress
-        className="h-3 w-full accent-primary"
-        aria-label="Resolved deliveries"
-        value={data.sent + data.failed}
-        max={total || 1}
+      <h2 className="section-label">Batch progress</h2>
+      <ProgressRing
+        sent={data.sent}
+        queued={data.queued}
+        failed={data.failed}
+        review={data.review}
+        seconds={estimateSeconds(data.outstanding, data.nextSendAt, now)}
       />
+      {(data.review > 0 || data.pendingDispatch) && (
+        <p className="text-sm text-warning">
+          {data.review
+            ? "Delivery needs review"
+            : "Waiting for delivery service"}
+        </p>
+      )}
       <p className="text-xs tabular-nums text-body">
         Elapsed: {Math.floor(elapsed / 60)}m {elapsed % 60}s
         {active && range

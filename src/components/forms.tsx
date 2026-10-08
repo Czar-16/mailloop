@@ -13,6 +13,10 @@ import {
 import type { ActionResult } from "@/lib/errors";
 import Link from "next/link";
 import { suggestName } from "@/lib/imports";
+import {
+  TemplatePreview,
+  type PreviewContact,
+} from "@/components/template-preview";
 import { RoleChoices } from "@/components/preferences";
 
 export function useUnsavedChanges(dirty: boolean, preserveQuery = false) {
@@ -125,7 +129,11 @@ const example = {
 };
 export function TemplateForm({
   template,
+  contacts = [],
+  resumeUrl = null,
 }: {
+  contacts?: PreviewContact[];
+  resumeUrl?: string | null;
   template?: { id: string; name: string; subject: string; body: string };
 }) {
   const [result, setResult] = useState<ActionResult>();
@@ -134,9 +142,19 @@ export function TemplateForm({
   useUnsavedChanges(dirty);
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
-  const focusedField = useRef<HTMLInputElement | HTMLTextAreaElement | null>(
-    null,
-  );
+  const [draft, setDraft] = useState({
+    subject: template?.subject ?? "",
+    body: template?.body ?? "",
+  });
+  const messageSelection = useRef({ start: 0, end: 0 });
+  function syncDraft() {
+    const form = formRef.current;
+    if (form)
+      setDraft({
+        subject: (form.elements.namedItem("subject") as HTMLInputElement).value,
+        body: (form.elements.namedItem("body") as HTMLTextAreaElement).value,
+      });
+  }
   useEffect(() => {
     if (!pending && result?.ok === false)
       formRef.current
@@ -144,192 +162,203 @@ export function TemplateForm({
         ?.focus();
   }, [result, pending]);
   return (
-    <form
-      ref={formRef}
-      className="panel space-y-5 p-6"
-      onChange={() => setDirty(true)}
-      onSubmit={(event) => {
-        event.preventDefault();
-        const form = new FormData(event.currentTarget);
-        start(async () => {
-          const r = await saveTemplate(form);
-          setResult(r);
-          if (r.ok) {
-            setDirty(false);
-            if (!template) formRef.current?.reset();
-            router.refresh();
-          }
-        });
-      }}
-    >
-      <h2 className="text-xl font-semibold tracking-tight">
-        {template ? "Edit Template" : "New Template"}
-      </h2>
-      <p className="text-sm text-body">
-        Write placeholders in templates: {"{{name}}, {{company}}, {{role}}"}.
-        Enter actual values in Contacts and Compose. {"{{resume_link}}"} uses
-        your saved HTTPS URL in the message body.
-      </p>
-      <div className="flex flex-wrap gap-2">
-        {["name", "company", "role", "resume_link"].map((token) => (
-          <Button
-            key={token}
-            type="button"
-            variant="outline"
-            disabled={pending}
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => {
-              const focused = focusedField.current;
-              const field =
-                token !== "resume_link" &&
-                focused &&
-                ["subject", "body"].includes(focused.name)
-                  ? focused
-                  : formRef.current?.querySelector<HTMLTextAreaElement>(
-                      "[name=body]",
-                    );
-              if (field) {
-                field.setRangeText(
-                  `{{${token}}}`,
-                  field.selectionStart ?? field.value.length,
-                  field.selectionEnd ?? field.value.length,
-                  "end",
-                );
-                field.focus();
-                setDirty(true);
+    <div className="template-grid">
+      <form
+        ref={formRef}
+        className="panel space-y-4 p-5"
+        onChange={() => {
+          setDirty(true);
+          syncDraft();
+        }}
+        onSubmit={(event) => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          start(async () => {
+            const r = await saveTemplate(form);
+            setResult(r);
+            if (r.ok) {
+              setDirty(false);
+              if (!template) {
+                formRef.current?.reset();
+                syncDraft();
               }
-            }}
-          >
-            Insert {`{{${token}}}`}
-          </Button>
-        ))}
-      </div>
-      {!template && (
-        <details open>
-          <summary className="min-h-11 cursor-pointer">
-            Reference Template
-          </summary>
-          <p className="mt-3 text-sm">{example.subject}</p>
-          <p className="my-3 whitespace-pre-wrap text-sm">{example.body}</p>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={pending}
-            onClick={() => {
-              if (
-                dirty &&
-                !window.confirm(
-                  "Replace your current subject and message with the example?",
-                )
-              )
-                return;
-              for (const key of ["subject", "body"] as const) {
-                const field = formRef.current?.querySelector<HTMLInputElement>(
-                  `[name=${key}]`,
-                );
-                if (field) field.value = example[key];
-              }
-              setDirty(true);
-            }}
-          >
-            Use Example
-          </Button>
-        </details>
-      )}
-      {template && <input type="hidden" name="id" value={template.id} />}
-      <div>
-        <label
-          htmlFor="template-name"
-          className="mb-2 block text-sm font-medium"
-        >
-          Template name
-        </label>
-        <Input
-          id="template-name"
-          disabled={pending}
-          aria-invalid={!!result?.fieldErrors?.name}
-          aria-describedby={
-            result?.fieldErrors?.name ? "error-name" : undefined
-          }
-          name="name"
-          defaultValue={template?.name}
-          required
-          maxLength={100}
-          autoComplete="off"
-          placeholder="A first introduction…"
-        />
-        <FieldError result={result} name="name" />
-      </div>
-      <div>
-        <label
-          htmlFor="template-subject"
-          className="mb-2 block text-sm font-medium"
-        >
-          Subject
-        </label>
-        <Input
-          onFocus={(e) => {
-            focusedField.current = e.currentTarget;
-          }}
-          id="template-subject"
-          disabled={pending}
-          aria-invalid={!!result?.fieldErrors?.subject}
-          aria-describedby={
-            result?.fieldErrors?.subject ? "error-subject" : undefined
-          }
-          name="subject"
-          defaultValue={template?.subject}
-          required
-          maxLength={250}
-          autoComplete="off"
-          placeholder="Exploring {{role}} opportunities at {{company}}…"
-        />
-        <FieldError result={result} name="subject" />
-      </div>
-      <div>
-        <label
-          htmlFor="template-body"
-          className="mb-2 block text-sm font-medium"
-        >
-          Message
-        </label>
-        <Textarea
-          onFocus={(e) => {
-            focusedField.current = e.currentTarget;
-          }}
-          id="template-body"
-          disabled={pending}
-          aria-invalid={!!result?.fieldErrors?.body}
-          aria-describedby={
-            result?.fieldErrors?.body ? "error-body" : undefined
-          }
-          name="body"
-          defaultValue={template?.body}
-          rows={10}
-          required
-          maxLength={20000}
-          autoComplete="off"
-          placeholder="Hi {{name}},…"
-        />
-        <FieldError result={result} name="body" />
-        <p className="mt-2 text-xs leading-5 text-body">
-          Personalize with <code>{"{{name}}"}</code>,{" "}
-          <code>{"{{company}}"}</code>, and <code>{"{{role}}"}</code>. Messages
-          are sent as plain text.
+              router.refresh();
+            }
+          });
+        }}
+      >
+        <h2 className="section-label">
+          {template ? "Edit Template" : "New Template"}
+        </h2>
+        <p className="sr-only">
+          Write placeholders in templates: {"{{name}}, {{company}}, {{role}}"}.
+          Enter actual values in Contacts and Compose. {"{{resume_link}}"} uses
+          your saved HTTPS URL in the message body.
         </p>
-      </div>
-      <Feedback result={result} />
-      <div className="flex gap-2">
-        <Button type="submit" disabled={pending}>
-          {pending ? "Saving…" : "Save Template"}
-        </Button>
-        {template && (
-          <Button asChild variant="outline">
-            <Link href="/templates">Cancel</Link>
+        <div className="flex flex-wrap gap-2">
+          {["name", "company", "role", "resume_link"].map((token) => (
+            <Button
+              key={token}
+              type="button"
+              variant="outline"
+              className="chip"
+              disabled={pending}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                const field =
+                  formRef.current?.querySelector<HTMLTextAreaElement>(
+                    "[name=body]",
+                  );
+                if (field) {
+                  field.setRangeText(
+                    `{{${token}}}`,
+                    messageSelection.current.start,
+                    messageSelection.current.end,
+                    "end",
+                  );
+                  field.focus();
+                  messageSelection.current = {
+                    start: field.selectionStart,
+                    end: field.selectionEnd,
+                  };
+                  setDirty(true);
+                  syncDraft();
+                }
+              }}
+            >
+              {`{{${token}}}`}
+            </Button>
+          ))}
+        </div>
+        {template && <input type="hidden" name="id" value={template.id} />}
+        <div>
+          <label
+            htmlFor="template-name"
+            className="mb-2 block text-sm font-medium"
+          >
+            Template name
+          </label>
+          <Input
+            id="template-name"
+            disabled={pending}
+            aria-invalid={!!result?.fieldErrors?.name}
+            aria-describedby={
+              result?.fieldErrors?.name ? "error-name" : undefined
+            }
+            name="name"
+            defaultValue={template?.name}
+            required
+            maxLength={100}
+            autoComplete="off"
+            placeholder="A first introduction…"
+          />
+          <FieldError result={result} name="name" />
+        </div>
+        <div>
+          <label
+            htmlFor="template-subject"
+            className="mb-2 block text-sm font-medium"
+          >
+            Subject
+          </label>
+          <Input
+            id="template-subject"
+            disabled={pending}
+            aria-invalid={!!result?.fieldErrors?.subject}
+            aria-describedby={
+              result?.fieldErrors?.subject ? "error-subject" : undefined
+            }
+            name="subject"
+            defaultValue={template?.subject}
+            required
+            maxLength={250}
+            autoComplete="off"
+            placeholder="Exploring {{role}} opportunities at {{company}}…"
+          />
+          <FieldError result={result} name="subject" />
+        </div>
+        <div>
+          <label
+            htmlFor="template-body"
+            className="mb-2 block text-sm font-medium"
+          >
+            Message
+          </label>
+          <Textarea
+            onSelect={(e) => {
+              messageSelection.current = {
+                start: e.currentTarget.selectionStart,
+                end: e.currentTarget.selectionEnd,
+              };
+            }}
+            id="template-body"
+            disabled={pending}
+            aria-invalid={!!result?.fieldErrors?.body}
+            aria-describedby={
+              result?.fieldErrors?.body ? "error-body" : undefined
+            }
+            name="body"
+            defaultValue={template?.body}
+            rows={7}
+            className="text-[13px]"
+            required
+            maxLength={20000}
+            autoComplete="off"
+            placeholder="Hi {{name}},…"
+          />
+          <FieldError result={result} name="body" />
+          <p className="mt-2 text-xs leading-5 text-body">
+            Personalize with <code>{"{{name}}"}</code>,{" "}
+            <code>{"{{company}}"}</code>, and <code>{"{{role}}"}</code>.
+            Messages are sent as plain text.
+          </p>
+        </div>
+        <Feedback result={result} />
+        <div className="flex gap-2">
+          <Button type="submit" disabled={pending}>
+            {pending ? "Saving…" : "Save Template"}
           </Button>
-        )}
-      </div>
-    </form>
+          {!template && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending}
+              onClick={() => {
+                if (
+                  dirty &&
+                  !window.confirm(
+                    "Replace your current subject and message with the example?",
+                  )
+                )
+                  return;
+                for (const key of ["subject", "body"] as const) {
+                  const field =
+                    formRef.current?.querySelector<HTMLInputElement>(
+                      `[name=${key}]`,
+                    );
+                  if (field) field.value = example[key];
+                }
+                setDirty(true);
+                syncDraft();
+              }}
+            >
+              Use Example
+            </Button>
+          )}
+          {template && (
+            <Button asChild variant="outline">
+              <Link href="/templates">Cancel</Link>
+            </Button>
+          )}
+        </div>
+      </form>
+      <TemplatePreview
+        contacts={contacts}
+        resumeUrl={resumeUrl}
+        subject={draft.subject}
+        body={draft.body}
+      />
+    </div>
   );
 }
 export function ContactForm({

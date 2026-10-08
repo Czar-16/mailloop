@@ -69,9 +69,16 @@ export default async function Contacts({
         description="Build your shortlist, one person or one CSV at a time."
       />
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <section>
-          <form method="get" action="/contacts" className="mb-4 flex gap-2">
-            <label htmlFor="contact-search" className="sr-only">
+        <section className="min-w-0">
+          <form
+            method="get"
+            action="/contacts"
+            className="mb-4 grid grid-cols-[minmax(0,1fr)_auto] gap-2"
+          >
+            <label
+              htmlFor="contact-search"
+              className="col-span-2 text-xs font-medium"
+            >
               Search contacts
             </label>
             <Input

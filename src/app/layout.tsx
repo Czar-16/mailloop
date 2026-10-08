@@ -1,9 +1,8 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { themeScript } from "@/lib/theme";
-const sans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const mono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+const sans = Inter({ variable: "--font-inter", subsets: ["latin"] });
 export const metadata: Metadata = {
   metadataBase: new URL("https://mailloop.in"),
   title: {
@@ -20,7 +19,7 @@ export const metadata: Metadata = {
     type: "website",
   },
 };
-export const viewport: Viewport = { themeColor: "#f8fafc" };
+export const viewport: Viewport = { themeColor: "#f6f5fb" };
 export default function RootLayout({
   children,
 }: {
@@ -30,7 +29,7 @@ export default function RootLayout({
     <html
       suppressHydrationWarning
       lang="en"
-      className={`${sans.variable} ${mono.variable} antialiased`}
+      className={`${sans.variable} antialiased`}
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />

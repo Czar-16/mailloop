@@ -7,9 +7,10 @@ export function Wordmark() {
       className="inline-flex min-h-11 items-center gap-2 text-xl font-semibold tracking-tight"
       translate="no"
     >
-      <Mail className="size-5" aria-hidden="true" />
+      <span className="logo-mark">
+        <Mail className="size-4" aria-hidden="true" />
+      </span>
       mailloop
-      <span className="size-1.5 rounded-full bg-foreground" />
     </Link>
   );
 }
@@ -25,10 +26,10 @@ export function PageHeading({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+    <div className="mb-[22px] flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0">
-        <p className="eyebrow mb-3">{eyebrow}</p>
-        <h1 className="text-[32px] leading-10">{title}</h1>
+        <p className="eyebrow mb-1 text-link">{eyebrow}</p>
+        <h1 className="text-[34px] leading-tight">{title}</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-body">
           {description}
         </p>
@@ -69,17 +70,18 @@ export function EmptyState({
 }
 export function Status({ status }: { status: string }) {
   const styles: Record<string, string> = {
-    QUEUED: "bg-muted text-body",
-    SENT: "bg-muted text-link",
-    FAILED: "bg-warning-soft text-error-deep",
-    REPLIED: "bg-muted text-link",
+    QUEUED: "status-queued",
+    SENT: "status-sent",
+    FAILED: "status-failed",
+    REPLIED: "status-sent",
   };
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-sm px-2 py-1 text-xs font-medium ${styles[status] ?? styles.QUEUED}`}
-    >
-      <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />
-      {status.toLowerCase()}
+    <span className={`status-pill ${styles[status] ?? styles.QUEUED}`}>
+      <span
+        aria-hidden="true"
+        className="status-dot size-1.5 rounded-full bg-current"
+      />
+      {status.charAt(0) + status.slice(1).toLowerCase()}
     </span>
   );
 }

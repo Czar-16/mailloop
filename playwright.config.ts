@@ -1,12 +1,13 @@
 import { existsSync } from "node:fs";
 import { defineConfig, devices, chromium } from "@playwright/test";
+const existingBaseURL = process.env.MAILLOOP_E2E_BASE_URL;
 export default defineConfig({
   testDir: "tests/browser",
   fullyParallel: false,
   workers: 1,
   timeout: 60000,
   use: {
-    baseURL: "http://localhost:3100",
+    baseURL: existingBaseURL ?? "http://localhost:3100",
     trace: "retain-on-failure",
     launchOptions: {
       executablePath:
@@ -23,16 +24,18 @@ export default defineConfig({
       use: { ...devices["iPhone 13"], defaultBrowserType: "chromium" },
     },
   ],
-  webServer: {
-    command: "npm run dev -- --port 3100",
-    url: "http://localhost:3100",
-    reuseExistingServer: false,
-    timeout: 120000,
-    env: {
-      AUTH_URL: "http://localhost:3100",
-      AUTH_TRUST_HOST: "true",
-      INNGEST_DEV: "1",
-      INNGEST_BASE_URL: "http://127.0.0.1:1",
-    },
-  },
+  webServer: existingBaseURL
+    ? undefined
+    : {
+        command: "npm run dev -- --port 3100",
+        url: "http://localhost:3100",
+        reuseExistingServer: false,
+        timeout: 120000,
+        env: {
+          AUTH_URL: "http://localhost:3100",
+          AUTH_TRUST_HOST: "true",
+          INNGEST_DEV: "1",
+          INNGEST_BASE_URL: "http://127.0.0.1:1",
+        },
+      },
 });

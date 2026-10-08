@@ -56,7 +56,7 @@ export function AccountMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         variant="outline"
-        className="size-11 rounded-full p-0"
+        className="size-11 rounded-full bg-accent-soft text-link p-0"
         onClick={() => setOpen(!open)}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown") {
