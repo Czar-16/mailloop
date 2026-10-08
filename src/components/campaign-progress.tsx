@@ -50,10 +50,10 @@ export function CampaignProgress({ data }: { data: CampaignProgressData }) {
   const total = data.queued + data.sent + data.failed + data.review;
   return (
     <section
-      className="panel mb-6 space-y-4 p-6"
+      className="panel mb-6 space-y-4 p-4 sm:p-6"
       aria-label="Campaign delivery progress"
     >
-      <h2 className="text-xl font-semibold">
+      <h2 className="text-lg font-semibold leading-[26px]">
         {data.review
           ? "Delivery needs review"
           : data.pendingDispatch
@@ -83,19 +83,19 @@ export function CampaignProgress({ data }: { data: CampaignProgressData }) {
         ))}
       </div>
       <progress
-        className="h-3 w-full accent-primary"
+        className="h-2 w-full appearance-none overflow-hidden rounded-full border border-control-border bg-muted [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:bg-primary [&::-moz-progress-bar]:bg-primary"
         aria-label="Resolved deliveries"
         value={data.sent + data.failed}
         max={total || 1}
       />
-      <p className="text-xs tabular-nums text-body">
+      <p className="text-sm leading-[22px] tabular-nums text-body">
         Elapsed: {Math.floor(elapsed / 60)}m {elapsed % 60}s
         {active && range
           ? ` · Approximate remaining: ${range.min}–${range.max} minutes across your queue`
           : ""}
       </p>
       {active && (
-        <p className="text-xs text-body">
+        <p className="text-sm leading-[22px] text-body">
           Retries and service delays can extend this estimate. Delivery
           completes only when the service confirms the outcome.
         </p>

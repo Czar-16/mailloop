@@ -27,7 +27,7 @@ export function HistoryControls({
     return () => clearInterval(interval);
   }, [hasQueued, autoRefresh, router]);
   return (
-    <div className="space-y-2">
+    <div className="max-w-sm space-y-2 [&_p:empty]:hidden">
       <Button
         variant="outline"
         disabled={pending}

@@ -8,11 +8,12 @@ export const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:opacity-90",
+        default: "bg-primary text-primary-foreground hover:bg-primary-hover",
         outline:
           "border border-control-border bg-card text-foreground hover:bg-muted",
         ghost: "text-body hover:bg-muted hover:text-foreground",
-        destructive: "bg-destructive text-background hover:bg-error-deep",
+        destructive:
+          "bg-destructive-action text-white hover:bg-destructive-action-hover",
       },
       size: { default: "h-11", sm: "h-11 px-3", icon: "size-11 p-0" },
     },

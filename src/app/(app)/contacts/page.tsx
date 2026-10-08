@@ -64,30 +64,37 @@ export default async function Contacts({
   return (
     <>
       <PageHeading
-        eyebrow="People worth reaching out to"
         title="Contacts"
-        description="Build your shortlist, one person or one CSV at a time."
+        description="Manage your recipients, job roles, and contact lists."
       />
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <section>
-          <form method="get" action="/contacts" className="mb-4 flex gap-2">
-            <label htmlFor="contact-search" className="sr-only">
-              Search contacts
-            </label>
-            <Input
-              id="contact-search"
-              name="q"
-              defaultValue={q}
-              placeholder="Search names, emails, or companies…"
-              autoComplete="off"
-            />
-            <Button variant="outline" type="submit">
-              Search
-            </Button>
-          </form>
+      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <section className="min-w-0">
+          <div className="panel mb-4 p-4 sm:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold leading-[26px]">
+                Contact Directory
+              </h2>
+              <p className="text-sm tabular-nums text-body">{total} results</p>
+            </div>
+            <form method="get" action="/contacts" className="mt-4 flex gap-2">
+              <label htmlFor="contact-search" className="sr-only">
+                Search contacts
+              </label>
+              <Input
+                id="contact-search"
+                name="q"
+                defaultValue={q}
+                placeholder="Search names, emails, or companies…"
+                autoComplete="off"
+              />
+              <Button variant="outline" type="submit">
+                Search
+              </Button>
+            </form>
+          </div>
           {!contacts.length ? (
             <EmptyState
-              title={q ? "No contacts found" : "Meet your shortlist"}
+              title={q ? "No contacts found" : "No contacts yet"}
               description={
                 q
                   ? "Try another name, email, or company."
@@ -95,48 +102,81 @@ export default async function Contacts({
               }
             />
           ) : (
-            <div className="panel overflow-x-auto">
-              <table className="w-full text-sm">
+            <div
+              role="region"
+              aria-label="Contact directory table"
+              tabIndex={0}
+              className="panel overflow-x-auto"
+            >
+              <table
+                role="table"
+                className="responsive-table w-full min-w-0 text-sm sm:min-w-[680px]"
+              >
                 <caption className="sr-only">Your contacts</caption>
-                <thead>
-                  <tr>
-                    <th>Person</th>
-                    <th>Company</th>
-                    <th>Job Role</th>
-                    <th>Last Sent</th>
-                    <th>Actions</th>
+                <thead role="rowgroup">
+                  <tr role="row">
+                    <th role="columnheader" scope="col">
+                      Person
+                    </th>
+                    <th role="columnheader" scope="col">
+                      Company
+                    </th>
+                    <th role="columnheader" scope="col">
+                      Job Role
+                    </th>
+                    <th role="columnheader" scope="col">
+                      Last Sent
+                    </th>
+                    <th role="columnheader" scope="col">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody role="rowgroup">
                   {contacts.map((c) => (
-                    <tr key={c.id}>
-                      <td>
-                        <p className="max-w-64 break-words font-medium">
+                    <tr role="row" key={c.id}>
+                      <td role="cell">
+                        <p className="sm:max-w-64 break-words font-medium">
                           {c.name}
                         </p>
-                        <p className="mt-1 max-w-64 break-all text-xs text-body">
+                        <p className="mt-1 sm:max-w-64 break-all text-sm text-body">
                           {c.email}
                         </p>
                       </td>
-                      <td className="max-w-40 break-words text-body">
+                      <td
+                        role="cell"
+                        className="sm:max-w-40 break-words text-body"
+                      >
+                        <span className="mb-1 block text-xs text-body sm:hidden">
+                          Company
+                        </span>
                         {c.company || "—"}
                       </td>
-                      <td className="max-w-40 break-words text-body">
+                      <td
+                        role="cell"
+                        className="sm:max-w-40 break-words text-body"
+                      >
+                        <span className="mb-1 block text-xs text-body sm:hidden">
+                          Job Role
+                        </span>
                         {c.jobRole || "Choose a job role"}
                       </td>
-                      <td className="whitespace-nowrap text-xs text-body">
+                      <td
+                        role="cell"
+                        className="table-wide text-xs text-body sm:whitespace-nowrap"
+                      >
+                        <span className="mb-1 block text-xs text-body sm:hidden">
+                          Last Sent
+                        </span>
                         <DateTime
                           value={c.sends[0]?.sentAt?.toISOString() ?? null}
                         />
                       </td>
-                      <td>
-                        <div className="flex">
-                          <Link
-                            href={`/contacts?edit=${c.id}`}
-                            className="inline-flex min-h-11 items-center px-3 text-link"
-                          >
-                            Edit
-                          </Link>
+                      <td role="cell" className="table-wide">
+                        <div className="flex flex-wrap gap-2">
+                          <Button asChild variant="outline" size="sm">
+                            <Link href={`/contacts?edit=${c.id}`}>Edit</Link>
+                          </Button>
                           <DeleteButton id={c.id} kind="contact" />
                         </div>
                       </td>

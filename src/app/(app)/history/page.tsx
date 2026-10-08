@@ -145,9 +145,8 @@ export default async function History({
   return (
     <>
       <PageHeading
-        eyebrow="Every introduction, in view"
         title="History"
-        description="Follow your messages from the queue to a new conversation."
+        description="Review campaign delivery, sending activity, and replies."
         action={
           <HistoryControls
             hasQueued={queued > 0}
@@ -174,9 +173,9 @@ export default async function History({
             note: "Conversations started · checked every 15 minutes",
           },
         ].map((s) => (
-          <div key={s.label} className="panel p-6">
+          <div key={s.label} className="panel p-4 sm:p-6">
             <p className="text-sm text-body">{s.label}</p>
-            <p className="mt-3 text-[32px] font-semibold tracking-tight tabular-nums">
+            <p className="mt-3 text-2xl font-semibold leading-8 tabular-nums">
               {new Intl.NumberFormat("en").format(s.value)}
             </p>
             <p className="mt-2 text-xs leading-5 text-body">{s.note}</p>
@@ -186,7 +185,7 @@ export default async function History({
       <form
         method="get"
         action="/history"
-        className="mb-4 flex flex-wrap gap-3"
+        className="panel mb-4 flex flex-wrap gap-3 p-4 sm:p-6"
       >
         {focused && <input type="hidden" name="campaign" value={focused.id} />}
         <label htmlFor="history-search" className="sr-only">
@@ -207,7 +206,7 @@ export default async function History({
           id="history-status"
           name="status"
           defaultValue={status ?? ""}
-          className="text-sm"
+          className="text-base"
         >
           <option value="">All Statuses</option>
           {["QUEUED", "SENT", "FAILED", "REPLIED"].map((s) => (
@@ -222,8 +221,14 @@ export default async function History({
       </form>
       {!sends.length ? (
         <EmptyState
-          title="Your introductions start here"
-          description="Once you send a campaign, each recipient’s delivery and replies will appear here."
+          title={
+            q || status ? "No matching deliveries" : "No delivery history yet"
+          }
+          description={
+            q || status
+              ? "Try another search or status filter."
+              : "Once you send a campaign, each recipient’s delivery and replies will appear here."
+          }
           href="/compose"
           link="Compose an Email"
         />
@@ -234,52 +239,80 @@ export default async function History({
           tabIndex={0}
           className="panel overflow-x-auto"
         >
-          <table className="w-full text-sm">
+          <table
+            role="table"
+            className="responsive-table w-full min-w-0 text-sm sm:min-w-[680px]"
+          >
             <caption className="sr-only">Email delivery history</caption>
-            <thead>
-              <tr>
-                <th>Recipient</th>
-                <th>Company</th>
-                <th>Template</th>
-                <th>Sent</th>
-                <th>Status</th>
+            <thead role="rowgroup">
+              <tr role="row">
+                <th role="columnheader" scope="col">
+                  Recipient
+                </th>
+                <th role="columnheader" scope="col">
+                  Company
+                </th>
+                <th role="columnheader" scope="col">
+                  Template
+                </th>
+                <th role="columnheader" scope="col">
+                  Sent
+                </th>
+                <th role="columnheader" scope="col">
+                  Status
+                </th>
               </tr>
             </thead>
-            <tbody>
+            <tbody role="rowgroup">
               {sends.map((s) => (
-                <tr key={s.id}>
-                  <td>
-                    <p className="max-w-56 break-words font-medium">
+                <tr role="row" key={s.id}>
+                  <td role="cell">
+                    <p className="sm:max-w-56 break-words font-medium">
                       {s.recipientName}
                     </p>
-                    <p className="mt-1 max-w-56 break-all text-xs text-body">
+                    <p className="mt-1 sm:max-w-56 break-all text-sm text-body">
                       {s.recipientEmail}
                     </p>
                   </td>
-                  <td className="max-w-40 break-words text-body">
+                  <td role="cell" className="sm:max-w-40 break-words text-body">
+                    <span className="mb-1 block text-xs text-body sm:hidden">
+                      Company
+                    </span>
                     {s.recipientCompany || "—"}
                   </td>
-                  <td className="max-w-40 break-words text-body">
+                  <td role="cell" className="sm:max-w-40 break-words text-body">
+                    <span className="mb-1 block text-xs text-body sm:hidden">
+                      Template
+                    </span>
                     {s.templateName}
                   </td>
-                  <td className="whitespace-nowrap text-xs text-body">
+                  <td
+                    role="cell"
+                    className="table-wide text-xs text-body sm:whitespace-nowrap"
+                  >
+                    <span className="mb-1 block text-xs text-body sm:hidden">
+                      Sent
+                    </span>
                     <DateTime value={s.sentAt?.toISOString() ?? null} />
                   </td>
-                  <td>
+                  <td role="cell" className="table-wide">
+                    <span className="mb-1 block text-xs text-body sm:hidden">
+                      Status
+                    </span>
                     {s.deliveryState === "UNCERTAIN" ? (
-                      <span className="text-warning">
-                        Delivery needs review
-                      </span>
+                      <Status status="UNCERTAIN" />
+                    ) : s.deliveryState === "ATTEMPTING" ? (
+                      <Status status="ATTEMPTING" />
                     ) : (
                       <Status status={s.status} />
                     )}
                     {s.error && (
-                      <p className="mt-2 max-w-64 break-words text-xs leading-5 text-warning">
+                      <p className="mt-2 sm:max-w-64 break-words text-sm leading-[22px] text-warning">
                         {s.error}
                       </p>
                     )}
                     {s.status === "QUEUED" && !s.dispatchedAt && (
-                      <p className="mt-2 text-xs text-body">
+                      <p className="mt-2 text-sm leading-[22px] text-body">
                         Waiting for delivery service
                       </p>
                     )}

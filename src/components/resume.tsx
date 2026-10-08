@@ -24,12 +24,12 @@ export function Resume({
   const dialog = useRef<HTMLDialogElement>(null);
   const router = useRouter();
   return (
-    <section className="panel space-y-5 p-6">
+    <section className="panel space-y-5 p-4 sm:p-6">
       <div>
-        <h2 className="text-xl font-semibold tracking-tight">Your Resume</h2>
+        <h2 className="text-lg font-semibold leading-[26px]">Your Resume</h2>
         <p className="mt-2 text-sm leading-6 text-body">
-          One PDF, attached to every new email. Optional, up to 5 MB. Queued
-          emails retain the resume you selected when sending.
+          Attach an optional PDF to your campaigns, up to 5 MB. Queued emails
+          retain the resume you selected when sending.
         </p>
       </div>
       {fileName && (
@@ -111,7 +111,10 @@ export function Resume({
       </form>
       <Feedback result={result} />
       <dialog ref={dialog} aria-labelledby="remove-resume-title">
-        <h2 id="remove-resume-title" className="text-xl font-semibold">
+        <h2
+          id="remove-resume-title"
+          className="text-lg font-semibold leading-[26px]"
+        >
           Remove your resume?
         </h2>
         <p className="mt-3 text-sm text-body">
