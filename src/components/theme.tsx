@@ -1,5 +1,6 @@
 "use client";
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
+import { usePathname } from "next/navigation";
 import { Sun, Moon } from "lucide-react";
 type Theme = "light" | "dark";
 let localChoice: Theme | null = null;
@@ -16,26 +17,34 @@ function preference(): Theme | null {
     return localChoice;
   }
 }
+function updateThemeColor() {
+  const landing = document.querySelector(".landing");
+  const color = getComputedStyle(landing ?? document.documentElement)
+    .getPropertyValue(landing ? "--landing-bg" : "--background")
+    .trim();
+  document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => {
+    meta.setAttribute("content", color);
+  });
+}
 function apply(theme: Theme) {
   document.documentElement.dataset.theme = theme;
-  document
-    .querySelector('meta[name="theme-color"]')
-    ?.setAttribute(
-      "content",
-      getComputedStyle(document.documentElement)
-        .getPropertyValue("--background")
-        .trim(),
-    );
+  updateThemeColor();
   window.dispatchEvent(new Event("mailloop-theme"));
+}
+function defaultTheme(): Theme {
+  return window.location.pathname === "/" ||
+    matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
 }
 function subscribe(callback: () => void) {
   const query = matchMedia("(prefers-color-scheme: dark)");
   const system = () => {
-    if (!preference()) apply(query.matches ? "dark" : "light");
+    if (!preference()) apply(defaultTheme());
   };
   const storage = () => {
     localChoice = null;
-    apply(preference() ?? (query.matches ? "dark" : "light"));
+    apply(preference() ?? defaultTheme());
   };
   window.addEventListener("mailloop-theme", callback);
   window.addEventListener("storage", storage);
@@ -98,7 +107,13 @@ function switchTheme(theme: Theme, button: HTMLButtonElement) {
     });
 }
 export function ThemeControl() {
+  const pathname = usePathname();
+  useEffect(() => {
+    apply(preference() ?? defaultTheme());
+  }, [pathname]);
   const theme = useSyncExternalStore(subscribe, snapshot, () => "light");
+  // React may reinsert managed metadata during a theme render. Update it afterwards.
+  useEffect(updateThemeColor, [theme, pathname]);
   return (
     <div className="inline-flex items-center gap-3">
       <span className="text-xs text-body">Theme</span>

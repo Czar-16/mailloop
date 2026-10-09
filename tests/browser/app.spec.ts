@@ -84,7 +84,7 @@ const test = base.extend<{ userId: string }>({
 base("public landing and protected-route authentication", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toContainText(
-    "opportunity",
+    "Send up to 15 cold emails at once.",
   );
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   for (const route of [
@@ -846,6 +846,18 @@ test("example template, focused placeholder insertion, pasted lists and mixed ro
   await expect(progress.locator(".completion-check")).toBeVisible({
     timeout: 15000,
   });
+  const frozenArc = progress.locator(
+    ".completion-countdown-exit .batch-countdown-arc",
+  );
+  await expect(frozenArc).toHaveCount(1);
+  const frozenOffset = await frozenArc.getAttribute("stroke-dashoffset");
+  await page.waitForTimeout(600);
+  await expect(frozenArc).toHaveAttribute("stroke-dashoffset", frozenOffset!);
+  expect(
+    await progress
+      .locator(".completion-countdown-exit")
+      .evaluate((element) => getComputedStyle(element).opacity),
+  ).toBe("0");
   await expect(progress).toContainText(
     "All messages confirmed by the service.",
   );
@@ -878,7 +890,9 @@ test("example template, focused placeholder insertion, pasted lists and mixed ro
   await page.reload();
   await expect(progress).toHaveCount(0);
   await page.goto("/compose");
-  await expect(page.getByText(/Last Sent:/).first()).toBeVisible();
+  await expect(
+    page.getByText("Last sent", { exact: true }).first(),
+  ).toBeVisible();
   await page.getByRole("link", { name: "History", exact: true }).click();
   await expect(page).toHaveURL(/\/history$/);
   await expect(progress).toHaveCount(0);
@@ -1098,60 +1112,133 @@ test("progress distinguishes uncertain outcomes and includes the user queue in e
   await expect(card).toHaveCount(0);
 });
 
-test("single-recipient batches show Sending without a countdown until confirmed", async ({
-  page,
-  userId,
-}) => {
-  const template = randomUUID(),
-    contact = randomUUID(),
-    campaign = randomUUID(),
-    send = randomUUID();
-  await pool.query(
-    "INSERT INTO \"Template\" (id,\"userId\",name,subject,body) VALUES ($1,$2,'Single timer','Hi','Hello')",
-    [template, userId],
-  );
-  await pool.query(
-    "INSERT INTO \"Contact\" (id,\"userId\",name,email) VALUES ($1,$2,'Alex','single-timer@example.test')",
-    [contact, userId],
-  );
-  await pool.query(
-    'INSERT INTO "Campaign" (id,"userId","templateId",status) VALUES ($1,$2,$3,\'QUEUED\')',
-    [campaign, userId, template],
-  );
-  await pool.query(
-    'INSERT INTO "Send" (id,"campaignId","contactId",status,"deliveryState","dispatchedAt") VALUES ($1,$2,$3,\'QUEUED\',\'READY\',now())',
-    [send, campaign, contact],
-  );
-  await pool.query('UPDATE "User" SET "nextSendAt"=$2::timestamp WHERE id=$1', [
+for (const reducedMotion of [false, true]) {
+  test(`single-recipient batches show Sending without a countdown until confirmed (${reducedMotion ? "reduced" : "normal"} motion)`, async ({
+    page,
     userId,
-    new Date(Date.now() + 60000).toISOString(),
-  ]);
-  await page.goto(`/history?campaign=${campaign}`);
-  const card = page.getByRole("region", { name: "Campaign delivery progress" });
-  const timer = card.locator(".timer-value");
-  await expect(timer).toHaveText("Sending");
-  await expect(card.locator(".batch-countdown-track")).toHaveCount(0);
-  await expectCenterToFit(card);
-  await expect(card).not.toContainText("EST. LEFT");
-  await expect(card).not.toContainText("Remaining");
-  await pool.query(
-    'UPDATE "Send" SET "deliveryState"=\'ATTEMPTING\', "attemptedAt"=now() WHERE id=$1',
-    [send],
-  );
-  await expect(card).toContainText("CONFIRMING", { timeout: 15000 });
-  await expect(timer).toHaveText("Sending");
-  await expect(card).not.toContainText("Remaining");
-  await pool.query(
-    'UPDATE "Send" SET status=\'SENT\', "deliveryState"=\'DONE\', "sentAt"=now() WHERE id=$1',
-    [send],
-  );
-  await expect(card.getByRole("status")).toHaveText("Complete", {
-    timeout: 15000,
+  }) => {
+    await page.emulateMedia({
+      reducedMotion: reducedMotion ? "reduce" : "no-preference",
+    });
+    const template = randomUUID(),
+      contact = randomUUID(),
+      campaign = randomUUID(),
+      send = randomUUID();
+    await pool.query(
+      "INSERT INTO \"Template\" (id,\"userId\",name,subject,body) VALUES ($1,$2,'Single timer','Hi','Hello')",
+      [template, userId],
+    );
+    await pool.query(
+      "INSERT INTO \"Contact\" (id,\"userId\",name,email) VALUES ($1,$2,'Alex','single-timer@example.test')",
+      [contact, userId],
+    );
+    await pool.query(
+      'INSERT INTO "Campaign" (id,"userId","templateId",status) VALUES ($1,$2,$3,\'QUEUED\')',
+      [campaign, userId, template],
+    );
+    await pool.query(
+      'INSERT INTO "Send" (id,"campaignId","contactId",status,"deliveryState","dispatchedAt") VALUES ($1,$2,$3,\'QUEUED\',\'READY\',now())',
+      [send, campaign, contact],
+    );
+    await pool.query(
+      'UPDATE "User" SET "nextSendAt"=$2::timestamp WHERE id=$1',
+      [userId, new Date(Date.now() + 60000).toISOString()],
+    );
+    await page.goto(`/history?campaign=${campaign}`);
+    const card = page.getByRole("region", {
+      name: "Campaign delivery progress",
+    });
+    const timer = card.locator(".timer-value");
+    await expect(timer).toHaveText("Sending");
+    await expect(card.locator(".batch-countdown-track")).toHaveCount(0);
+    await expectCenterToFit(card);
+    await expect(card).not.toContainText("EST. LEFT");
+    await expect(card).not.toContainText("Remaining");
+    await pool.query(
+      'UPDATE "Send" SET "deliveryState"=\'ATTEMPTING\', "attemptedAt"=now() WHERE id=$1',
+      [send],
+    );
+    await expect(card).toContainText("CONFIRMING", { timeout: 15000 });
+    await expect(timer).toHaveText("Sending");
+    await expect(card).not.toContainText("Remaining");
+    await pool.query(
+      'UPDATE "Send" SET status=\'SENT\', "deliveryState"=\'DONE\', "sentAt"=now() WHERE id=$1',
+      [send],
+    );
+    await expect(card.getByRole("status")).toHaveText("Complete", {
+      timeout: 15000,
+    });
+    await expect(card.locator(".completion-check")).toBeVisible();
+    await expect(card.getByText("ALL SENT", { exact: true })).toBeVisible();
+    await expect(timer).toHaveCount(0);
+    const completion = card.getByRole("img", {
+      name: "Batch complete. All emails sent.",
+      exact: true,
+    });
+    await expect(completion).toBeVisible();
+    await expect(completion).toHaveClass(/is-entering/);
+    await page.waitForTimeout(1000);
+    const animationState = () =>
+      completion.evaluate((element) =>
+        element.getAnimations({ subtree: true }).map((animation) => ({
+          name: (animation as CSSAnimation).animationName,
+          state: animation.playState,
+          time: animation.currentTime,
+        })),
+      );
+    const finished = await animationState();
+    if (reducedMotion) expect(finished).toEqual([]);
+    else {
+      expect(finished.map((item) => item.name).sort()).toEqual([
+        "completion-badge-pop",
+        "completion-check-draw",
+        "completion-label-enter",
+        "completion-ripple",
+      ]);
+      expect(finished.every((item) => item.state === "finished")).toBe(true);
+    }
+    for (const theme of ["Light", "Dark"]) {
+      await page
+        .getByRole("button", { name: `${theme} theme`, exact: true })
+        .click();
+      expect(await animationState()).toEqual(finished);
+      const ring = await card.locator(".progress-ring").boundingBox();
+      expect(ring!.width).toBe(148);
+      expect(ring!.height).toBe(148);
+      const contained = await completion.evaluate((element) => {
+        const inner = element.querySelector(".completion-inner")!;
+        const box = inner.getBoundingClientRect();
+        const centerX = box.x + box.width / 2,
+          centerY = box.y + box.height / 2;
+        return (
+          [".completion-badge", ".completion-label"].every((selector) => {
+            const rect = element
+              .querySelector(selector)!
+              .getBoundingClientRect();
+            return [
+              [rect.left, rect.top],
+              [rect.right, rect.bottom],
+              [rect.right, rect.top],
+              [rect.left, rect.bottom],
+            ].every(
+              ([x, y]) =>
+                Math.hypot(x - centerX, y - centerY) <= box.width / 2 + 0.5,
+            );
+          }) && getComputedStyle(inner).overflow === "hidden"
+        );
+      });
+      expect(contained).toBe(true);
+      expect(
+        await completion
+          .locator(".completion-ripple")
+          .evaluate((element) => getComputedStyle(element).opacity),
+      ).toBe("0");
+    }
+    await page.getByLabel("Filter by status").selectOption("SENT");
+    await expect(page).toHaveURL(/status=SENT/);
+    expect(await animationState()).toEqual(finished);
   });
-  await expect(card.locator(".completion-check")).toBeVisible();
-  await expect(card.getByText("Done", { exact: true })).toBeVisible();
-  await expect(timer).toHaveCount(0);
-});
+}
 
 for (const allFailed of [false, true]) {
   test(`whole-batch countdown survives polls, individual sends and completes ${allFailed ? "all-failed" : "mixed"} batches`, async ({
@@ -1810,15 +1897,15 @@ base(
       };
     });
     await page.goto("/");
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     await page
       .getByRole("banner")
-      .getByRole("button", { name: "Dark theme", exact: true })
+      .getByRole("button", { name: "Light theme", exact: true })
       .click();
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
     await page.emulateMedia({ colorScheme: "dark" });
     await page.emulateMedia({ colorScheme: "light" });
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
     expect(
       await page.evaluate(() =>
         document

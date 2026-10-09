@@ -1,12 +1,52 @@
-import { ThemeControl } from "@/components/theme";
+import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, Files, Users, Send, Paperclip, Check } from "lucide-react";
+import { Bricolage_Grotesque, DM_Sans } from "next/font/google";
+import { ArrowRight, Mail } from "lucide-react";
 import { auth, signIn } from "@/auth";
 import { db } from "@/lib/db";
 import { redirect } from "next/navigation";
-import { Wordmark } from "@/components/common";
-import { Button } from "@/components/ui/button";
+import { ThemeSwitch } from "@/components/landing/theme-switch";
+import { BatchProgressCard } from "@/components/landing/batch-progress-card";
+import { FeatureCards } from "@/components/landing/feature-cards";
+import "@/components/landing/landing.css";
+
+const headings = Bricolage_Grotesque({
+  variable: "--font-landing-heading",
+  subsets: ["latin"],
+  weight: ["700", "800"],
+  display: "swap",
+});
+const body = DM_Sans({
+  variable: "--font-landing-body",
+  subsets: ["latin"],
+  display: "swap",
+});
+
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = {
+  title: { absolute: "Mailloop — Personalized outreach, made easy" },
+  description:
+    "Send up to 15 personalized cold emails at once from your own Gmail. Attach your resume and track delivery and replies with Mailloop.",
+};
+
+const steps = [
+  [
+    "01",
+    "Write your template",
+    "Draft once with placeholders for name and company. Save it to reuse.",
+  ],
+  [
+    "02",
+    "Pick up to 15 contacts",
+    "Choose from your saved contacts and attach your resume.",
+  ],
+  [
+    "03",
+    "Send, then follow",
+    "One click sends individual emails from your Gmail. Watch delivery and replies.",
+  ],
+];
+
 export default async function Home({
   searchParams,
 }: {
@@ -26,142 +66,123 @@ export default async function Home({
     await signIn("google", { redirectTo: "/compose" });
   };
   return (
-    <>
-      <header className="border-b border-border">
-        <div className="page-container flex flex-wrap items-center justify-between gap-3 py-4">
-          <Wordmark />
-          <ThemeControl />
+    <div className={`landing ${headings.variable} ${body.variable}`}>
+      <header className="landing-container landing-header">
+        <Link
+          href="/"
+          className="landing-logo"
+          aria-label="Mailloop home"
+          translate="no"
+        >
+          <span className="landing-logo-mark">
+            <Mail size={22} aria-hidden="true" />
+          </span>
+          <span>mailloop</span>
+        </Link>
+        <div className="landing-header-controls">
+          <nav aria-label="Main navigation" className="landing-nav">
+            <a href="#how">How it works</a>
+            <a href="#features">Features</a>
+          </nav>
+          <ThemeSwitch />
           <form action={googleSignIn}>
-            <Button variant="outline">
-              Sign In <ArrowRight aria-hidden="true" />
-            </Button>
+            <button
+              type="submit"
+              className="landing-button landing-button-outline"
+            >
+              Sign in
+            </button>
           </form>
         </div>
       </header>
-      <main id="main-content">
-        <section className="relative isolate overflow-hidden border-b border-border">
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -right-32 top-0 -z-10 h-[560px] w-[700px] opacity-25 blur-3xl"
-            style={{
-              background:
-                "radial-gradient(ellipse at 45% 40%, var(--link), transparent 65%)",
-            }}
-          />
-          <div className="page-container grid items-center gap-12 py-24 lg:grid-cols-2 lg:py-32">
-            <div>
-              <p className="eyebrow mb-6">A better way to reach out</p>
-              <h1 className="max-w-xl text-[40px] leading-[44px] sm:text-5xl sm:leading-[48px]">
-                Your next opportunity
-                <br />
-                starts with an introduction.
-              </h1>
-              <p className="mt-6 max-w-md text-base leading-7 text-body">
-                Write once. Send thoughtful cold emails to up to 15 people at a
-                time, individually, from your own Gmail.
+      <main id="main-content" className="landing-container">
+        <section className="landing-hero" aria-labelledby="hero-title">
+          <div className="min-w-0">
+            <p className="landing-eyebrow">Personalized outreach, made easy.</p>
+            <h1 id="hero-title">
+              Send up to <span className="landing-gradient-text">15</span> cold
+              emails at <span className="landing-gradient-text">once</span>.
+            </h1>
+            <p className="landing-hero-copy">
+              Write once, then send a separate, personalized email to each
+              recruiter from your own Gmail. Your resume attached. Replies
+              tracked.
+            </p>
+            {error && (
+              <p role="alert" className="landing-auth-error">
+                Google sign-in could not complete. Try again and grant Gmail
+                permissions.
               </p>
-              {error && (
-                <p role="alert" className="mt-4 text-sm text-error-deep">
-                  Google sign-in could not complete. Try again and grant Gmail
-                  permissions.
-                </p>
-              )}
-              <form action={googleSignIn} className="mt-8">
-                <Button className="w-full rounded-full px-6 sm:w-auto">
-                  Get Started with Google <ArrowRight aria-hidden="true" />
-                </Button>
+            )}
+            <div className="landing-hero-actions">
+              <form action={googleSignIn}>
+                <button type="submit" className="landing-button">
+                  Get started with Google{" "}
+                  <ArrowRight size={18} aria-hidden="true" />
+                </button>
               </form>
-              <p className="mt-4 text-xs text-body">
-                Your Gmail. Your resume. Your next chapter.
+              <p>
+                Free to start.
+                <br className="hidden sm:block" /> Sends from your Gmail.
               </p>
-            </div>
-            <div className="panel overflow-hidden">
-              <div className="flex items-center justify-between border-b border-border px-6 py-4">
-                <span className="eyebrow">A personal introduction</span>
-                <span className="text-xs text-body">Preview</span>
-              </div>
-              <div className="space-y-4 p-6 text-sm leading-6">
-                <p className="text-body">
-                  To <span className="ml-3 text-foreground">Alex at Acme</span>
-                </p>
-                <p className="border-b border-border pb-4 font-medium">
-                  A frontend engineer for your next chapter
-                </p>
-                <p>Hi Alex,</p>
-                <p className="text-body">
-                  I’ve been following the work at Acme and would love to
-                  contribute as a frontend engineer.
-                </p>
-                <p className="text-body">
-                  I’ve attached my resume. Would you be open to a quick
-                  conversation?
-                </p>
-                <p>
-                  Thanks,
-                  <br />
-                  Your name
-                </p>
-                <div className="inline-flex items-center gap-2 rounded-sm border border-border px-3 py-2 text-xs">
-                  <Paperclip className="size-3" aria-hidden="true" />
-                  Resume.pdf
-                </div>
-              </div>
-              <div className="border-t border-border bg-background px-6 py-4 text-xs text-body">
-                <Check className="mr-2 inline size-3" aria-hidden="true" />
-                One email per recipient.
-              </div>
             </div>
           </div>
+          <BatchProgressCard />
         </section>
-        <section className="page-container py-16 sm:py-24">
-          <p className="eyebrow mb-4">From draft to conversation</p>
-          <h2 className="text-[32px] font-semibold leading-10 tracking-tight">
-            Less busywork. More possibility.
-          </h2>
-          <div className="mt-8 grid gap-4 md:grid-cols-3">
-            {[
-              {
-                icon: Files,
-                title: "Find your words",
-                body: "Save reusable templates. Personalize each introduction with a name, company, and role.",
-              },
-              {
-                icon: Users,
-                title: "Build your shortlist",
-                body: "Add contacts or import a CSV. Catch duplicates before they become awkward follow-ups.",
-              },
-              {
-                icon: Send,
-                title: "Make the connection",
-                body: "Send separately from Gmail. Track delivery and replies while Mailloop handles the queue.",
-              },
-            ].map(({ icon: Icon, title, body }) => (
-              <article key={title} className="panel p-6">
-                <Icon className="mb-6 size-5" aria-hidden="true" />
-                <h3 className="text-xl font-semibold tracking-tight">
-                  {title}
-                </h3>
-                <p className="mt-3 text-sm leading-6 text-body">{body}</p>
+        <section
+          id="how"
+          className="landing-section"
+          aria-labelledby="how-title"
+        >
+          <p className="landing-eyebrow">From draft to conversation</p>
+          <h2 id="how-title">Three steps. Each email goes out on its own.</h2>
+          <div className="landing-card-grid">
+            {steps.map(([number, title, copy]) => (
+              <article key={number} className="landing-glow-card landing-step">
+                <span className="landing-step-number">{number}</span>
+                <h3>{title}</h3>
+                <p>{copy}</p>
               </article>
             ))}
           </div>
         </section>
+        <FeatureCards />
+        <section className="landing-closing" aria-labelledby="closing-title">
+          <div className="landing-closing-glow" aria-hidden="true" />
+          <div className="relative">
+            <p className="landing-eyebrow">Ready when you are</p>
+            <h2 id="closing-title">
+              Your next <span className="landing-gradient-text">15 intros</span>{" "}
+              are one click away.
+            </h2>
+            <p className="landing-closing-copy">
+              Connect Gmail, pick your template, and send. We’ll show you every
+              delivery and reply.
+            </p>
+            <form action={googleSignIn}>
+              <button
+                type="submit"
+                className="landing-button landing-button-gradient"
+              >
+                Start sending <ArrowRight size={18} aria-hidden="true" />
+              </button>
+            </form>
+            <ul className="landing-closing-benefits">
+              <li>Sends from your Gmail</li>
+              <li>One email per person</li>
+              <li>Replies tracked</li>
+            </ul>
+          </div>
+        </section>
       </main>
-      <footer className="border-t border-border">
-        <div className="page-container flex flex-wrap items-center justify-between gap-4 py-8">
-          <Wordmark />
-          <ThemeControl />
-          <span className="text-xs text-body">
-            Built for your next chapter.
+      <footer className="landing-container">
+        <div className="landing-footer">
+          <span className="landing-footer-wordmark" translate="no">
+            mailloop
           </span>
-          <Link
-            href="https://myaccount.google.com/connections"
-            className="min-h-11 py-3 text-xs text-link"
-          >
-            Manage Google Permissions
-          </Link>
+          <p>Personalized outreach, made easy.</p>
         </div>
       </footer>
-    </>
+    </div>
   );
 }

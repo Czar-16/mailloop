@@ -78,7 +78,7 @@ describe("History batch progress edge states", () => {
       finishedAt: "2026-10-09T10:00:40Z",
     });
     expect(complete).toContain("completion-check");
-    expect(complete).toContain("Done");
+    expect(complete).toContain("ALL SENT");
     expect(complete).not.toContain("batch-countdown-track");
   });
 

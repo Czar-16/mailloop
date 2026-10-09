@@ -1,10 +1,19 @@
 import { useEffect, useId, useRef, useState } from "react";
+import {
+  RingCompletion,
+  useRingCompletion,
+} from "@/components/ring-completion";
 import { batchCountdownProgress } from "@/lib/progress";
 
 type Countdown = { startAt: number; endAt: number; observedAt: number };
 const countdownCircumference = 2 * Math.PI * 59;
 
-function CountdownArc({ startAt, endAt, observedAt }: Countdown) {
+function CountdownArc({
+  startAt,
+  endAt,
+  observedAt,
+  frozen = false,
+}: Countdown & { frozen?: boolean }) {
   const circle = useRef<SVGCircleElement>(null);
   const [initialOffset] = useState(
     () =>
@@ -13,7 +22,7 @@ function CountdownArc({ startAt, endAt, observedAt }: Countdown) {
   );
   useEffect(() => {
     const element = circle.current;
-    if (!element) return;
+    if (!element || frozen) return;
     const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
     let frame = 0;
     let interval: ReturnType<typeof setInterval> | undefined;
@@ -62,7 +71,7 @@ function CountdownArc({ startAt, endAt, observedAt }: Countdown) {
       document.removeEventListener("visibilitychange", synchronize);
       motion.removeEventListener("change", synchronize);
     };
-  }, [startAt, endAt]);
+  }, [startAt, endAt, frozen]);
   return (
     <circle
       ref={circle}
@@ -119,6 +128,10 @@ export function ProgressRing({
   const idle = draft && total === 0;
   const complete =
     !draft && sent > 0 && queued === 0 && failed === 0 && review === 0;
+  const completion = useRingCompletion(
+    complete,
+    queued > 0 ? countdown : undefined,
+  );
   const circumference = 2 * Math.PI * 70;
   const nonempty = segments.filter((segment) => segment.count > 0).length;
   let offset = 0;
@@ -164,65 +177,53 @@ export function ProgressRing({
             stroke={idle ? `url(#${gradientId})` : "var(--ring-track)"}
             strokeWidth={idle ? 11 : 12}
           />
-          {segments.map((segment) => {
-            const length = total ? (segment.count / total) * circumference : 0;
-            const gap = nonempty > 1 ? Math.min(14, length * 0.3) : 0;
-            const start = offset;
-            offset += length;
-            return (
-              <circle
-                key={segment.label}
-                cx="85"
-                cy="85"
-                r="70"
-                fill="none"
-                stroke={segment.color}
-                strokeWidth="12"
-                strokeLinecap="round"
-                strokeDasharray={`${Math.max(0, length - gap)} ${circumference}`}
-                strokeDashoffset={-start - gap / 2}
-                style={{ opacity: segment.count ? 1 : 0 }}
-              />
-            );
-          })}
-          {queued > 0 && countdown && <CountdownArc {...countdown} />}
-        </svg>
-        <div className="absolute inset-0 mx-auto grid w-[110px] content-center text-center">
-          {complete && (
-            <svg
-              className="completion-check mx-auto mb-1 size-20 text-success"
-              viewBox="0 0 40 40"
-              fill="none"
-              aria-hidden="true"
-            >
-              <path
-                className="completion-check-path"
-                d="M8 21L16 29L32 12"
-                stroke="currentColor"
-                strokeWidth="3"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                pathLength="1"
-              />
-            </svg>
+          {!complete &&
+            segments.map((segment) => {
+              const length = total
+                ? (segment.count / total) * circumference
+                : 0;
+              const gap = nonempty > 1 ? Math.min(14, length * 0.3) : 0;
+              const start = offset;
+              offset += length;
+              return (
+                <circle
+                  key={segment.label}
+                  cx="85"
+                  cy="85"
+                  r="70"
+                  fill="none"
+                  stroke={segment.color}
+                  strokeWidth="12"
+                  strokeLinecap="round"
+                  strokeDasharray={`${Math.max(0, length - gap)} ${circumference}`}
+                  strokeDashoffset={-start - gap / 2}
+                  style={{ opacity: segment.count ? 1 : 0 }}
+                />
+              );
+            })}
+          {completion.countdown && (
+            <g className={complete ? "completion-countdown-exit" : undefined}>
+              <CountdownArc {...completion.countdown} frozen={complete} />
+            </g>
           )}
-          {!complete && (
+        </svg>
+        {complete && (
+          <RingCompletion
+            size={170}
+            radius={70}
+            strokeWidth={12}
+            animate={completion.animate}
+          />
+        )}
+        {!complete && (
+          <div className="absolute inset-0 mx-auto grid w-[110px] content-center text-center">
             <b
               className={`timer-value font-mono ${center === "Sending" ? "text-[18px]" : "text-[30px]"} tracking-[-.04em] tabular-nums`}
             >
               {center}
             </b>
-          )}
-          <span
-            className={
-              complete
-                ? "text-[12px] font-extrabold uppercase tracking-[.16em] text-foreground"
-                : "text-[10px] uppercase tracking-wide text-body"
-            }
-          >
-            {complete
-              ? "Done"
-              : queued
+            <span className="text-[10px] uppercase tracking-wide text-body">
+              {queued
                 ? !draft && seconds === 0
                   ? "Please be patient"
                   : "est. left"
@@ -233,8 +234,9 @@ export function ProgressRing({
                     : sent
                       ? "all sent"
                       : "est. time left"}
-          </span>
-        </div>
+            </span>
+          </div>
+        )}
       </div>
       <div className="grid gap-2 text-[13px]">
         {segments.map((segment) => (

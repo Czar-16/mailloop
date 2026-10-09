@@ -2,6 +2,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Clock, Hourglass, Send } from "lucide-react";
+import {
+  RingCompletion,
+  useRingCompletion,
+} from "@/components/ring-completion";
 import { estimateSeconds } from "@/components/progress-ring";
 import { batchCountdownProgress, remainingRange } from "@/lib/progress";
 import type { CampaignProgressData } from "@/lib/campaign-progress";
@@ -87,7 +91,12 @@ type BatchSegment = { label: string; count: number; color: string };
 type BatchCountdown = { startAt: number; endAt: number; observedAt: number };
 const countdownCircumference = 2 * Math.PI * 53;
 
-function BatchCountdownArc({ startAt, endAt, observedAt }: BatchCountdown) {
+function BatchCountdownArc({
+  startAt,
+  endAt,
+  observedAt,
+  frozen = false,
+}: BatchCountdown & { frozen?: boolean }) {
   const circle = useRef<SVGCircleElement>(null);
   const [initialOffset] = useState(
     () =>
@@ -96,7 +105,7 @@ function BatchCountdownArc({ startAt, endAt, observedAt }: BatchCountdown) {
   );
   useEffect(() => {
     const element = circle.current;
-    if (!element) return;
+    if (!element || frozen) return;
     const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
     let frame = 0;
     let interval: ReturnType<typeof setInterval> | undefined;
@@ -145,7 +154,7 @@ function BatchCountdownArc({ startAt, endAt, observedAt }: BatchCountdown) {
       document.removeEventListener("visibilitychange", synchronize);
       motion.removeEventListener("change", synchronize);
     };
-  }, [startAt, endAt]);
+  }, [startAt, endAt, frozen]);
   return (
     <circle
       ref={circle}
@@ -178,6 +187,13 @@ function BatchRing({
   caption: string;
   countdown?: BatchCountdown;
 }) {
+  const complete =
+    !active &&
+    total > 0 &&
+    segments.every(
+      (segment) => segment.label === "Sent" || segment.count === 0,
+    );
+  const completion = useRingCompletion(complete, countdown);
   const circumference = 2 * Math.PI * 64;
   const nonempty = segments.filter((segment) => segment.count > 0);
   return (
@@ -198,35 +214,36 @@ function BatchRing({
           strokeOpacity="0.25"
           strokeWidth="9"
         />
-        {nonempty.map((segment, index) => {
-          const length =
-            total > 0 ? (segment.count / total) * circumference : 0;
-          const gap = nonempty.length > 1 ? Math.min(14, length * 0.3) : 0;
-          const start =
-            total > 0
-              ? (nonempty
-                  .slice(0, index)
-                  .reduce((sum, previous) => sum + previous.count, 0) /
-                  total) *
-                circumference
-              : 0;
-          return (
-            <circle
-              key={segment.label}
-              cx="74"
-              cy="74"
-              r="64"
-              fill="none"
-              stroke={segment.color}
-              strokeWidth="9"
-              strokeLinecap="round"
-              strokeDasharray={`${Math.max(0, length - gap)} ${circumference}`}
-              strokeDashoffset={-start - gap / 2}
-            />
-          );
-        })}
-        {countdown && (
-          <>
+        {!complete &&
+          nonempty.map((segment, index) => {
+            const length =
+              total > 0 ? (segment.count / total) * circumference : 0;
+            const gap = nonempty.length > 1 ? Math.min(14, length * 0.3) : 0;
+            const start =
+              total > 0
+                ? (nonempty
+                    .slice(0, index)
+                    .reduce((sum, previous) => sum + previous.count, 0) /
+                    total) *
+                  circumference
+                : 0;
+            return (
+              <circle
+                key={segment.label}
+                cx="74"
+                cy="74"
+                r="64"
+                fill="none"
+                stroke={segment.color}
+                strokeWidth="9"
+                strokeLinecap="round"
+                strokeDasharray={`${Math.max(0, length - gap)} ${circumference}`}
+                strokeDashoffset={-start - gap / 2}
+              />
+            );
+          })}
+        {completion.countdown && (
+          <g className={complete ? "completion-countdown-exit" : undefined}>
             <circle
               className="batch-countdown-track"
               cx="74"
@@ -237,46 +254,56 @@ function BatchRing({
               strokeOpacity="0.25"
               strokeWidth="3"
             />
-            <BatchCountdownArc {...countdown} />
-          </>
+            <BatchCountdownArc {...completion.countdown} frozen={complete} />
+          </g>
         )}
       </svg>
-      <div className="batch-ring-center absolute inset-0 mx-auto grid w-[88px] content-center justify-items-center gap-1 text-center">
-        {!active ? (
-          <>
-            <svg
-              className="completion-check size-16 text-[var(--success)]"
-              viewBox="0 0 40 40"
-              fill="none"
-              aria-hidden="true"
-            >
-              <path
-                className="completion-check-path"
-                d="M8 21L16 29L32 12"
-                stroke="currentColor"
-                strokeWidth="3"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                pathLength="1"
-              />
-            </svg>
-            <span className="text-[12px] font-extrabold uppercase tracking-[.16em] text-foreground">
-              Done
-            </span>
-          </>
-        ) : (
-          <>
-            <b
-              className={`timer-value font-mono ${caption === "EST. LEFT" ? (center.length <= 4 ? "text-[32px]" : center.length === 5 ? "text-[28px]" : center.length === 6 ? "text-[23px]" : "text-[19px]") : "text-[18px]"} font-medium tracking-[-.04em] tabular-nums`}
-            >
-              {center}
-            </b>
-            <span className="w-full max-w-[76px] font-mono text-[9px] leading-tight tracking-[.04em] text-body">
-              {caption}
-            </span>
-          </>
-        )}
-      </div>
+      {complete && (
+        <RingCompletion
+          size={148}
+          radius={64}
+          strokeWidth={9}
+          animate={completion.animate}
+        />
+      )}
+      {!complete && (
+        <div className="batch-ring-center absolute inset-0 mx-auto grid w-[88px] content-center justify-items-center gap-1 text-center">
+          {!active ? (
+            <>
+              <svg
+                className="completion-check size-16 text-[var(--success)]"
+                viewBox="0 0 40 40"
+                fill="none"
+                aria-hidden="true"
+              >
+                <path
+                  className="completion-check-path"
+                  d="M8 21L16 29L32 12"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  pathLength="1"
+                />
+              </svg>
+              <span className="text-[12px] font-extrabold uppercase tracking-[.16em] text-foreground">
+                Done
+              </span>
+            </>
+          ) : (
+            <>
+              <b
+                className={`timer-value font-mono ${caption === "EST. LEFT" ? (center.length <= 4 ? "text-[32px]" : center.length === 5 ? "text-[28px]" : center.length === 6 ? "text-[23px]" : "text-[19px]") : "text-[18px]"} font-medium tracking-[-.04em] tabular-nums`}
+              >
+                {center}
+              </b>
+              <span className="w-full max-w-[76px] font-mono text-[9px] leading-tight tracking-[.04em] text-body">
+                {caption}
+              </span>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

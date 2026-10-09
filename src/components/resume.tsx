@@ -100,6 +100,7 @@ export function Resume({
         </label>
         <Input
           ref={input}
+          className="h-11 py-0 leading-[42px] file:leading-[42px]"
           id="resume-file"
           name="file"
           type="file"

@@ -166,7 +166,7 @@ export function Compose({
                 {result.fieldErrors.role}
               </p>
             )}
-            <p className="mt-2 text-xs text-body">
+            <p className="mt-2 mb-3 text-xs text-body">
               Enter actual values here. Templates use{" "}
               {"{{name}}, {{company}}, and {{role}}"}. Each recipient keeps
               their own role; overrides apply only to this batch.

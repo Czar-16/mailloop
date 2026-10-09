@@ -122,6 +122,7 @@ export function Preferences({
         <label className="block text-sm">
           Custom role
           <Input
+            className="mt-2"
             ref={customInput}
             aria-invalid={!!roleError}
             aria-describedby={roleError ? "preference-role-error" : undefined}
