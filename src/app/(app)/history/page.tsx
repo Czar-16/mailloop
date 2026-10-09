@@ -111,7 +111,7 @@ async function HistoryContent({
           {
             label: "Replies",
             value: replies,
-            note: "Conversations started · checked every 15 minutes",
+            note: "Conversations started · checked every 8 hours",
           },
         ].map((s) => (
           <div key={s.label} className="panel p-6">

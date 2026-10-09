@@ -378,7 +378,11 @@ export async function replyCandidates(userId: string, force = false) {
               {
                 OR: [
                   { lastCheckedAt: null },
-                  { lastCheckedAt: { lt: new Date(Date.now() - 15 * 60000) } },
+                  {
+                    lastCheckedAt: {
+                      lt: new Date(Date.now() - 8 * 60 * 60000),
+                    },
+                  },
                 ],
               },
             ]),
@@ -466,7 +470,8 @@ export const refreshReplyJob = inngest.createFunction(
   async ({ event, step }) => {
     const userId = z.uuid().parse(event.data.userId);
     const sends = await step.run("tracked-threads", () =>
-      replyCandidates(userId, true),
+      // Manual events omit force; scheduled events explicitly respect the cutoff.
+      replyCandidates(userId, event.data.force !== false),
     );
     let replies = 0;
     for (const send of sends)
@@ -507,7 +512,7 @@ export const maintenance = inngest.createFunction(
 export const scheduledReplies = inngest.createFunction(
   {
     id: "scheduled-replies",
-    triggers: { cron: "*/15 * * * *" },
+    triggers: { cron: "0 */8 * * *" },
     concurrency: 1,
   },
   async ({ step }) => {
@@ -529,7 +534,7 @@ export const scheduledReplies = inngest.createFunction(
         `refresh-${page}`,
         ids.map((userId) => ({
           name: "mailloop/replies.refresh",
-          data: { userId },
+          data: { userId, force: false },
         })),
       );
       cursor = ids.at(-1);

@@ -38,6 +38,7 @@ vi.mock("@/lib/gmail", async (importOriginal) => {
 import {
   deliverOne,
   checkReplies,
+  replyCandidates,
   dispatchPending,
   inngest,
 } from "@/lib/inngest";
@@ -516,6 +517,58 @@ describe.runIf(enabled)(
       mocks.send.mockRejectedValueOnce({ response: { status: 403 } });
       expect((await deliverOne(userId, send.id)).outcome).toBe("done");
       expect(await db.send.count({ where: quotaWhere(userId) })).toBe(0);
+    });
+    it("applies the eight-hour cutoff only to automatic reply checks", async () => {
+      const campaign = await createCampaign(userId, request());
+      const now = Date.now();
+      const cutoff = now - 8 * 60 * 60000;
+      const ids = Array.from({ length: 5 }, () => randomUUID());
+      await db.send.createMany({
+        data: [null, cutoff - 1, cutoff, cutoff + 1, now].map(
+          (checked, index) => ({
+            id: ids[index],
+            campaignId: campaign.id,
+            contactId,
+            status: "SENT" as const,
+            gmailThreadId: `thread-${index}`,
+            sentAt: new Date(now - 24 * 60 * 60000),
+            lastCheckedAt: checked === null ? null : new Date(checked),
+          }),
+        ),
+      });
+      // Freeze only Date.now so the database driver's timers continue to work.
+      vi.spyOn(Date, "now").mockReturnValue(now);
+      expect(await replyCandidates(userId)).toEqual([
+        { id: ids[0] },
+        { id: ids[1] },
+      ]);
+      expect(await replyCandidates(otherId)).toEqual([]);
+      expect(await checkReplies(userId, true)).toEqual({
+        checked: 5,
+        replies: 0,
+      });
+      expect(mocks.thread).toHaveBeenCalledTimes(5);
+      expect(await replyCandidates(userId)).toEqual([]);
+    });
+    it("rotates automatic reply checks oldest first with a 50-thread limit", async () => {
+      const campaign = await createCampaign(userId, request());
+      const now = Date.now();
+      const ids = Array.from({ length: 51 }, () => randomUUID());
+      await db.send.createMany({
+        data: ids.map((id, index) => ({
+          id,
+          campaignId: campaign.id,
+          contactId,
+          status: "SENT" as const,
+          gmailThreadId: `thread-${index}`,
+          lastCheckedAt: new Date(now - 9 * 60 * 60000 + index),
+        })),
+      });
+      expect(await replyCandidates(userId)).toEqual(
+        ids.slice(0, 50).map((id) => ({ id })),
+      );
+      expect(await checkReplies(userId)).toEqual({ checked: 50, replies: 0 });
+      expect(await replyCandidates(userId)).toEqual([{ id: ids[50] }]);
     });
     it("detects a real recipient reply but ignores self messages and automatic responses", async () => {
       const campaign = await createCampaign(userId, request());
