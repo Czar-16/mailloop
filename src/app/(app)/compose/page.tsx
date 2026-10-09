@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/session";
 import { db } from "@/lib/db";
 import { readQuotaUsage } from "@/lib/quota-usage";
 import { PageHeading } from "@/components/common";
+import { InfinityMailLoop } from "@/components/InfinityMailLoop";
 import { Compose } from "@/components/compose";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -138,11 +139,14 @@ export default function ComposePage(
 ) {
   return (
     <div className="compose-page">
-      <PageHeading
-        eyebrow="A thoughtful introduction"
-        title="Make your next connection."
-        description="Choose your words, build a shortlist, and see exactly what each person will receive."
-      />
+      <div className="compose-hero">
+        <PageHeading
+          eyebrow="A thoughtful introduction"
+          title="Make your next connection."
+          description="Choose your words, build a shortlist, and see exactly what each person will receive."
+        />
+        <InfinityMailLoop />
+      </div>
       <Suspense fallback={<WorkspaceSkeleton page="compose" heading={false} />}>
         <ComposePageContent {...props} />
       </Suspense>

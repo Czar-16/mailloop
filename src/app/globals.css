@@ -721,6 +721,47 @@ textarea {
 }
 
 /* Compose presentation tokens are separate from the protected ring palette. */
+.compose-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 290px;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 22px;
+}
+.compose-hero > :first-child {
+  min-width: 0;
+  margin-bottom: 0;
+}
+.compose-hero .infinity-mail-loop {
+  --mail-loop-accent: #6d4aff;
+  --mail-loop-dot: #8b6cff;
+  --mail-loop-trail: #8b6cff;
+  --mail-loop-envelope-stroke: #ffffff;
+  --mail-loop-label: #5b5880;
+  --mail-loop-glow-outer: 0.03;
+  --mail-loop-glow-inner: 0.035;
+
+  display: block;
+  width: 290px;
+  height: 170px;
+}
+html[data-theme="dark"] .compose-hero .infinity-mail-loop {
+  --mail-loop-accent: #8b6cff;
+  --mail-loop-dot: #c4b5fd;
+  --mail-loop-trail: #a78bfa;
+  --mail-loop-envelope-stroke: #ece9ff;
+  --mail-loop-label: #9a95c4;
+  --mail-loop-glow-outer: 0.06;
+  --mail-loop-glow-inner: 0.07;
+}
+@media (max-width: 767px) {
+  .compose-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .compose-hero .infinity-mail-loop {
+    display: none;
+  }
+}
 body:has(.compose-page) {
   --recipients-bg: #f6f4ff;
   --recipients-surface: #ffffff;

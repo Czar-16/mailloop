@@ -140,6 +140,226 @@ test("workspace pages are accessible and fit the viewport", async ({
     ).toBe(true);
   }
 });
+test("Compose infinity mail motion, themes, and reduced motion", async ({
+  page,
+  userId,
+}, testInfo) => {
+  expect(userId).toBeTruthy();
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("/compose");
+  const svg = page.locator(".infinity-mail-loop");
+  await expect(svg.locator("animateMotion")).toHaveCount(6);
+  await expect(svg).toBeVisible();
+  const samples = await svg.evaluate((element) => {
+    const svg = element as SVGSVGElement;
+    svg.pauseAnimations();
+    const path = svg.querySelector<SVGPathElement>("#loop")!;
+    const total = path.getTotalLength();
+    const envelope = svg.querySelector<SVGGElement>(".mail-loop-envelope")!;
+    const position = (element: SVGGraphicsElement) => {
+      const matrix = svg.getCTM()!.inverse().multiply(element.getCTM()!);
+      return { x: matrix.e, y: matrix.f, b: matrix.b, c: matrix.c };
+    };
+    const sample = (time: number) => {
+      svg.setCurrentTime(time);
+      const expected = path.getPointAtLength(total * ((time % 6) / 6));
+      const actual = position(envelope);
+      return {
+        error: Math.hypot(actual.x - expected.x, actual.y - expected.y),
+        rotation: Math.abs(actual.b) + Math.abs(actual.c),
+      };
+    };
+    svg.setCurrentTime(0);
+    const initiallyHidden = [...svg.querySelectorAll(".mail-loop-trail")].every(
+      (dot) => getComputedStyle(dot).opacity === "0",
+    );
+    const pulses = [
+      ...svg.querySelectorAll<SVGCircleElement>(
+        ".mail-loop-node > circle:first-child",
+      ),
+    ].map((circle) => {
+      const arrival = Number(
+        circle
+          .querySelector("animate")!
+          .getAttribute("keyTimes")!
+          .split(";")[2],
+      );
+      svg.setCurrentTime(arrival * 6);
+      const point = path.getPointAtLength(arrival * total);
+      const actual = position(envelope);
+      return {
+        arrival,
+        nodeError: Math.hypot(point.x - circle.cx.baseVal.value, point.y - 90),
+        envelopeError: Math.hypot(actual.x - point.x, actual.y - point.y),
+        radius: circle.r.animVal.value,
+        opacity: Number(getComputedStyle(circle).opacity),
+      };
+    });
+    const motion = [0.5, 1.5, 3, 4.5, 6, 7.5].map(sample);
+    // Step two full loops at 60fps, including every center crossing and each
+    // trail's wraparound. Sparse position samples can miss a closing-segment hold.
+    const continuousMotion = [
+      envelope,
+      ...svg.querySelectorAll<SVGCircleElement>(".mail-loop-trail"),
+    ].map((element) => ({
+      element,
+      delay: parseFloat(
+        element.querySelector("animateMotion")!.getAttribute("begin") ?? "0",
+      ),
+      previous: null as { x: number; y: number } | null,
+      minimumStep: Infinity,
+      maximumError: 0,
+      maximumErrorTime: 0,
+      frames: 0,
+    }));
+    for (let frame = 0; frame <= 780; frame++) {
+      const time = frame / 60;
+      svg.setCurrentTime(time);
+      for (const sample of continuousMotion) {
+        // SMIL begin times have float precision; sample delayed dots only
+        // after their initial begin, when the motion transform is active.
+        if (
+          time < sample.delay ||
+          (sample.delay > 0 && time - sample.delay < 0.00001)
+        )
+          continue;
+        const actual = position(sample.element);
+        const expected = path.getPointAtLength(
+          total * (((time - sample.delay) % 6) / 6),
+        );
+        const error = Math.hypot(actual.x - expected.x, actual.y - expected.y);
+        if (error > sample.maximumError) sample.maximumErrorTime = time;
+        sample.maximumError = Math.max(
+          sample.maximumError,
+          Math.hypot(actual.x - expected.x, actual.y - expected.y),
+        );
+        if (sample.previous)
+          sample.minimumStep = Math.min(
+            sample.minimumStep,
+            Math.hypot(
+              actual.x - sample.previous.x,
+              actual.y - sample.previous.y,
+            ),
+          );
+        sample.previous = actual;
+        sample.frames++;
+      }
+    }
+    svg.setCurrentTime(2);
+    const trails = [
+      ...svg.querySelectorAll<SVGCircleElement>(".mail-loop-trail"),
+    ].map((dot) => {
+      const delay = parseFloat(
+        dot.querySelector("animateMotion")!.getAttribute("begin")!,
+      );
+      const expected = path.getPointAtLength(total * ((2 - delay) / 6));
+      const actual = position(dot);
+      return {
+        error: Math.hypot(actual.x - expected.x, actual.y - expected.y),
+        opacity: Number(getComputedStyle(dot).opacity),
+      };
+    });
+    return {
+      initiallyHidden,
+      pulses,
+      motion,
+      trails,
+      continuousMotion: continuousMotion.map(
+        ({ minimumStep, maximumError, maximumErrorTime, frames }) => ({
+          minimumStep,
+          maximumError,
+          maximumErrorTime,
+          frames,
+        }),
+      ),
+      expectedStep: total / 360,
+    };
+  });
+  await testInfo.attach("mail-loop-motion-samples", {
+    body: JSON.stringify(samples, null, 2),
+    contentType: "application/json",
+  });
+  expect(samples.initiallyHidden).toBe(true);
+  for (const sample of samples.continuousMotion) {
+    expect(sample.frames).toBeGreaterThan(720);
+    expect(sample.minimumStep).toBeGreaterThan(samples.expectedStep * 0.4);
+    expect(sample.maximumError).toBeLessThan(0.2);
+  }
+  for (const pulse of samples.pulses) {
+    expect(pulse.nodeError).toBeLessThan(0.1);
+    expect(pulse.envelopeError).toBeLessThan(0.2);
+    expect(pulse.radius).toBeCloseTo(18, 2);
+    expect(pulse.opacity).toBeCloseTo(0.08, 2);
+  }
+  for (const sample of samples.motion) {
+    expect(sample.error).toBeLessThan(0.2);
+    expect(sample.rotation).toBeLessThan(0.001);
+  }
+  for (const trail of samples.trails) {
+    expect(trail.error).toBeLessThan(0.2);
+    expect(trail.opacity).toBeGreaterThan(0);
+  }
+  for (const [theme, color] of [
+    ["Light", "rgb(109, 74, 255)"],
+    ["Dark", "rgb(139, 108, 255)"],
+  ]) {
+    await page
+      .getByRole("button", { name: `${theme} theme`, exact: true })
+      .click();
+    await expect(svg.locator("#loop")).toHaveCSS("stroke", color);
+    await page.evaluate(async () => {
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      );
+      await Promise.all(
+        document.documentElement
+          .getAnimations({ subtree: true })
+          .filter(
+            (animation) =>
+              animation.effect?.getTiming().iterations !== Infinity,
+          )
+          .map((animation) => animation.finished.catch(() => {})),
+      );
+    });
+    const hero = await page.locator(".compose-hero").boundingBox();
+    const search = await page
+      .locator('label[for="compose-search"]')
+      .boundingBox();
+    expect(search!.y - (hero!.y + hero!.height)).toBeCloseTo(22, 0);
+    await page
+      .locator(".compose-hero")
+      .evaluate((element) => element.scrollIntoView({ block: "center" }));
+    await page.locator(".compose-hero").screenshot({
+      path: testInfo.outputPath(`compose-loop-${theme.toLowerCase()}.png`),
+    });
+    await page.setViewportSize({ width: 375, height: 812 });
+    await expect(svg).toBeHidden();
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBeLessThanOrEqual(375);
+    await page.setViewportSize({ width: 1024, height: 768 });
+  }
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(svg.locator("animate, animateMotion, set")).toHaveCount(0);
+  await expect(svg.locator(".mail-loop-trail")).toHaveCount(0);
+  await expect(svg.locator(".mail-loop-envelope")).toHaveAttribute(
+    "transform",
+    "translate(150 90)",
+  );
+  // Also verify a fresh reduced-motion load and subsequent preference changes.
+  await page.reload();
+  await expect(svg.locator("animate, animateMotion, set")).toHaveCount(0);
+  await expect(svg.locator(".mail-loop-envelope")).toHaveAttribute(
+    "transform",
+    "translate(150 90)",
+  );
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await expect(svg.locator("animateMotion")).toHaveCount(6);
+  expect(errors).toEqual([]);
+});
 test("workspace tab entry motion preserves same-page updates and respects reduced motion", async ({
   page,
   userId,
