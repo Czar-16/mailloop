@@ -23,7 +23,7 @@ async function SettingsContent() {
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
         <section className="panel space-y-5 p-6">
           <h2 className="section-label">Account · Gmail connection</h2>
-          <div className="rounded-sm border border-border p-4">
+          <div className="hover-card rounded-sm border border-border p-4">
             <p className="break-all text-sm font-medium">{user.email}</p>
             <p
               className={`mt-2 text-xs ${connected ? "text-link" : "text-warning"}`}

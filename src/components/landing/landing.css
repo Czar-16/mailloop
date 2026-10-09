@@ -14,6 +14,8 @@
   --landing-accent-text: #a78bfa;
   --landing-on-accent: #0b0a14;
   --landing-violet: #8b5cf6;
+  --card-hover-accent: var(--landing-violet);
+  --card-hover-secondary: var(--landing-pink);
   --landing-pink: #e879f9;
   --landing-amber: #fbbf24;
   --landing-green: #34d399;
@@ -288,13 +290,6 @@ html[data-theme="dark"]:has(.landing) {
   box-shadow: inset 0 0 40px
     color-mix(in srgb, var(--landing-violet) 6%, transparent);
 }
-.landing-glow-card,
-.landing-batch {
-  transition:
-    transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
-    border-color 0.35s ease,
-    box-shadow 0.35s ease;
-}
 .landing-glow-card::before,
 .landing-batch::before {
   content: "";
@@ -333,38 +328,6 @@ html[data-theme="dark"]:has(.landing) {
   color: var(--landing-accent-text);
   margin-bottom: 28px;
 }
-@media (hover: hover) {
-  .landing-glow-card:hover,
-  .landing-batch:hover {
-    transform: translateY(-6px);
-    border-color: var(--landing-violet);
-    box-shadow:
-      0 0 0 1px
-        color-mix(
-          in srgb,
-          var(--landing-violet) calc(45% * var(--batch-shadow-scale, 1)),
-          transparent
-        ),
-      0 14px 44px -10px
-        color-mix(
-          in srgb,
-          var(--landing-violet) calc(50% * var(--batch-shadow-scale, 1)),
-          transparent
-        ),
-      0 0 30px
-        color-mix(
-          in srgb,
-          var(--landing-pink) calc(14% * var(--batch-shadow-scale, 1)),
-          transparent
-        ),
-      inset 0 0 40px
-        color-mix(
-          in srgb,
-          var(--landing-violet) calc(10% * var(--batch-shadow-scale, 1)),
-          transparent
-        );
-  }
-}
 .landing-features[data-reveal="pending"] .landing-glow-card {
   opacity: 0;
 }
@@ -394,6 +357,18 @@ html[data-theme="dark"]:has(.landing) {
     linear-gradient(135deg, #8b5cf6, #e879f9) border-box;
   box-shadow: 0 0 60px -10px
     color-mix(in srgb, var(--landing-violet) 45%, transparent);
+}
+@media (hover: hover) {
+  .landing-closing:hover {
+    transform: translateY(-6px);
+    border-color: var(--landing-violet);
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--landing-violet) 45%, transparent),
+      0 14px 60px -10px
+        color-mix(in srgb, var(--landing-violet) 65%, transparent),
+      0 0 30px color-mix(in srgb, var(--landing-pink) 14%, transparent),
+      inset 0 0 40px color-mix(in srgb, var(--landing-violet) 10%, transparent);
+  }
 }
 .landing-closing-glow {
   position: absolute;
@@ -804,9 +779,6 @@ html[data-theme="dark"]:has(.landing) {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .landing-batch:hover {
-    transform: none;
-  }
   .landing *,
   .landing *::before,
   .landing *::after {

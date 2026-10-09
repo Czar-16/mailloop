@@ -34,7 +34,7 @@ export function Resume({
         </p>
       </div>
       {fileName && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border p-4">
+        <div className="hover-card flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border p-4">
           <a
             href="/api/resume/download"
             className="flex min-h-11 min-w-0 items-center gap-2 break-all text-sm text-link"

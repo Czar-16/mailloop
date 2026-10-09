@@ -362,6 +362,98 @@ html[data-theme-reveal]::view-transition-new(root) {
 .border.border-control-border:focus-visible:not([aria-invalid="true"]) {
   border-color: var(--accent);
 }
+/* Only the innermost hovered card lifts; controls and skeletons stay still. */
+:is(
+  .panel,
+  .mail-preview,
+  .hover-card,
+  .recipient-card,
+  .send-checklist,
+  .landing-glow-card,
+  .landing-batch,
+  .landing-stat,
+  .landing-closing
+) {
+  transition:
+    transform 350ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    border-color 350ms ease,
+    box-shadow 350ms ease;
+}
+@media (hover: hover) {
+  :is(
+      .panel,
+      .mail-preview,
+      .hover-card,
+      .recipient-card,
+      .send-checklist,
+      .landing-glow-card,
+      .landing-batch,
+      .landing-stat
+    ):hover:not([aria-hidden="true"]):not([aria-hidden="true"] *):not(
+      :has(.skeleton)
+    ):not(
+      :has(
+        :is(
+          .panel,
+          .mail-preview,
+          .hover-card,
+          .recipient-card,
+          .send-checklist,
+          .landing-glow-card,
+          .landing-batch,
+          .landing-stat,
+          .landing-closing
+        ):hover
+      )
+    ) {
+    transform: translateY(-6px);
+    border-color: var(--card-hover-accent, var(--accent));
+    box-shadow:
+      0 0 0 1px
+        color-mix(
+          in srgb,
+          var(--card-hover-accent, var(--accent))
+            calc(45% * var(--batch-shadow-scale, 1)),
+          transparent
+        ),
+      0 14px 44px -10px
+        color-mix(
+          in srgb,
+          var(--card-hover-accent, var(--accent))
+            calc(50% * var(--batch-shadow-scale, 1)),
+          transparent
+        ),
+      0 0 30px
+        color-mix(
+          in srgb,
+          var(--card-hover-secondary, var(--accent2))
+            calc(14% * var(--batch-shadow-scale, 1)),
+          transparent
+        ),
+      inset 0 0 40px
+        color-mix(
+          in srgb,
+          var(--card-hover-accent, var(--accent))
+            calc(10% * var(--batch-shadow-scale, 1)),
+          transparent
+        );
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(
+    .panel,
+    .mail-preview,
+    .hover-card,
+    .recipient-card,
+    .send-checklist,
+    .landing-glow-card,
+    .landing-batch,
+    .landing-stat,
+    .landing-closing
+  ) {
+    transform: none !important;
+  }
+}
 .logo-mark {
   display: grid;
   place-items: center;

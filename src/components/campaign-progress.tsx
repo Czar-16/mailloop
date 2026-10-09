@@ -457,7 +457,7 @@ function BatchProgress({ data }: { data: CampaignProgressData }) {
             {stats.map((stat) => (
               <div
                 key={stat.label}
-                className="min-w-0 rounded-xl border border-border bg-[color-mix(in_srgb,var(--foreground)_3%,var(--card))] px-2.5 py-3 sm:px-3.5"
+                className="hover-card min-w-0 rounded-xl border border-border bg-[color-mix(in_srgb,var(--foreground)_3%,var(--card))] px-2.5 py-3 sm:px-3.5"
               >
                 <dt className="flex items-center gap-1.5 text-xs text-body">
                   <span
