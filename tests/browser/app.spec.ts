@@ -484,14 +484,12 @@ test("template, contact import, preview, and individual campaign queue", async (
   await expect(
     page.getByLabel("Choose a template", { exact: true }),
   ).toHaveValue("");
-  await page
-    .getByRole("button", { name: "Send to 1 recipient", exact: true })
-    .click();
   await expect(
-    page.getByText("Choose a template and at least one eligible recipient.", {
-      exact: true,
-    }),
-  ).toBeVisible();
+    page.getByRole("button", { name: "Send to 1 recipient", exact: true }),
+  ).toBeDisabled();
+  await expect(page.locator(".send-checklist")).toContainText(
+    "Choose one under 01 / The Message",
+  );
   await page
     .getByLabel("Choose a template", { exact: true })
     .selectOption({ label: "Introduction" });
@@ -668,12 +666,12 @@ test("setup, name suggestion manual override, account menu, and theme persistenc
   );
   expect(saved.rows[0].preferredRoles).toEqual(["SDE Intern"]);
   await page.getByRole("button", { name: "Account menu", exact: true }).click();
-  await expect(page.getByRole("menu")).toContainText("Test User");
+  await expect(page.getByRole("menu")).toContainText(`${userId}@example.test`);
   await expect(
     page.getByRole("menuitem", { name: "Settings", exact: true }),
   ).toBeFocused();
   await page.keyboard.press("ArrowDown");
-  await expect(page.getByRole("menuitem", { name: "Sign Out" })).toBeFocused();
+  await expect(page.getByRole("menuitem", { name: "Sign out" })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(
     page.getByRole("button", { name: "Account menu" }),
@@ -1495,12 +1493,23 @@ test("attachment defaults, example replacement warning, and batch role filters",
   await page.getByRole("button", { name: "Dark theme", exact: true }).click();
   await page.evaluate(async () => {
     await Promise.allSettled(
-      document.getAnimations().map((animation) => animation.finished),
+      document
+        .getAnimations()
+        .filter(
+          (animation) => animation.effect?.getTiming().iterations !== Infinity,
+        )
+        .map((animation) => animation.finished),
     );
   });
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.evaluate(() => localStorage.removeItem("mailloop-theme"));
   await page.reload();
+  // Wait for header hydration and the theme preference subscription after reload.
+  await page.getByRole("button", { name: "Account menu", exact: true }).click();
+  await expect(
+    page.getByRole("menuitem", { name: "Settings", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("Escape");
   await page.emulateMedia({ colorScheme: "light" });
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await page.emulateMedia({ colorScheme: "dark" });
@@ -2693,4 +2702,512 @@ test("help touch target and instant reduced-motion dismissal preserve scroll", a
   await expect(page.locator(".help-launcher")).toHaveCount(0);
   await expect(page.locator("#main-content")).toBeFocused();
   expect(await page.evaluate(() => window.scrollY)).toBe(scrollY);
+});
+
+async function seedReadinessWorkspace(userId: string) {
+  const templateId = randomUUID();
+  const campaignId = randomUUID();
+  await pool.query('UPDATE "User" SET "preferredRoles"=$2 WHERE id=$1', [
+    userId,
+    ["Engineer"],
+  ]);
+  await pool.query(
+    'INSERT INTO "Template" (id,"userId",name,subject,body) VALUES ($1,$2,$3,$4,$5)',
+    [
+      templateId,
+      userId,
+      "Readiness template",
+      "Hello {{name}}",
+      "Hi {{name}}, exploring {{role}}.",
+    ],
+  );
+  await pool.query(
+    'INSERT INTO "Campaign" (id,"userId","templateId",status) VALUES ($1,$2,$3,$4)',
+    [campaignId, userId, templateId, "QUEUED"],
+  );
+  const contacts: Record<string, string> = {};
+  for (const [name, role] of [
+    ["Alex", null],
+    ["Sam", " "],
+    ["Maya", "Engineer"],
+    ["Previously", "Engineer"],
+    ["Queued", "Engineer"],
+  ]) {
+    const id = randomUUID();
+    contacts[name!] = id;
+    await pool.query(
+      'INSERT INTO "Contact" (id,"userId",name,email,"jobRole") VALUES ($1,$2,$3,$4,$5)',
+      [id, userId, name, `${name}@example.test`, role],
+    );
+  }
+  await pool.query(
+    'INSERT INTO "Send" (id,"campaignId","contactId",status,"deliveryState","sentAt") VALUES ($1,$2,$3,$4,$5,$6)',
+    [
+      randomUUID(),
+      campaignId,
+      contacts.Previously,
+      "SENT",
+      "DONE",
+      new Date(Date.now() - 48 * 3600000),
+    ],
+  );
+  // Exact quota: 50 queued + 3 recently sent + 1 replied + 2 uncertain/in-flight.
+  for (let index = 0; index < 57; index++) {
+    const status =
+      index < 50
+        ? "QUEUED"
+        : index < 53
+          ? "SENT"
+          : index === 53
+            ? "REPLIED"
+            : "FAILED";
+    const delivery =
+      index === 54 ? "ATTEMPTING" : index === 55 ? "UNCERTAIN" : "DONE";
+    await pool.query(
+      'INSERT INTO "Send" (id,"campaignId","contactId",status,"deliveryState","sentAt") VALUES ($1,$2,$3,$4::"SendStatus",$5::"DeliveryState",$6)',
+      [
+        randomUUID(),
+        campaignId,
+        contacts.Queued,
+        status,
+        delivery,
+        ["SENT", "REPLIED"].includes(status) ? new Date() : null,
+      ],
+    );
+  }
+  const attachmentId = randomUUID();
+  await pool.query(
+    'INSERT INTO "Attachment" (id,"userId","fileName","storagePath") VALUES ($1,$2,$3,$4)',
+    [
+      attachmentId,
+      userId,
+      "readiness.pdf",
+      `browser-fixture/${userId}/readiness.pdf`,
+    ],
+  );
+  await pool.query('UPDATE "User" SET "currentAttachmentId"=$2 WHERE id=$1', [
+    userId,
+    attachmentId,
+  ]);
+  return { templateId, campaignId, contacts };
+}
+
+for (const theme of ["light", "dark"] as const) {
+  test(`workspace header and Compose readiness: ${theme}`, async ({
+    page,
+    userId,
+  }, testInfo) => {
+    const { templateId } = await seedReadinessWorkspace(userId);
+    await page.addInitScript(
+      (value) => localStorage.setItem("mailloop-theme", value),
+      theme,
+    );
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    for (const route of [
+      "compose",
+      "templates",
+      "contacts",
+      "history",
+      "settings",
+    ]) {
+      await page.goto(`/${route}`);
+      await expect(page.locator("main h1")).toBeVisible();
+      const header = page.locator(".workspace-header-controls");
+      expect(
+        await header.evaluate((element) =>
+          [...element.children].map((child) => child.className),
+        ),
+      ).toEqual([
+        "workspace-gmail",
+        "inline-flex items-center gap-3",
+        "workspace-account",
+      ]);
+      await expect(header).toHaveCSS("gap", "12px");
+      await expect(header.getByRole("progressbar")).toHaveCount(0);
+      await expect(header.locator(".workspace-gmail")).toHaveText(
+        "Gmail connected",
+      );
+      await expect(header.locator(".workspace-gmail")).toHaveCSS(
+        "height",
+        "52px",
+      );
+      await expect(header.locator(".workspace-account-trigger")).toHaveCSS(
+        "height",
+        "52px",
+      );
+      await expect(header.locator(".workspace-avatar")).toHaveCSS(
+        "width",
+        "40px",
+      );
+      await expect(header.locator(".workspace-avatar")).toHaveText("T");
+      await expect(header.locator(".workspace-mono-label")).toHaveCSS(
+        "font-family",
+        /JetBrains/,
+      );
+      await expect(header).toHaveCSS("font-family", /Plus Jakarta/);
+      // Preserve the existing font everywhere outside the requested areas.
+      await expect(page.locator("main h1")).toHaveCSS("font-family", /Inter/);
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth),
+      ).toBeLessThanOrEqual(page.viewportSize()!.width);
+      expect(
+        await header.evaluate((element) =>
+          [...element.children].every((child) => {
+            const rect = child.getBoundingClientRect();
+            return rect.left >= 0 && rect.right <= innerWidth;
+          }),
+        ),
+      ).toBe(true);
+      const account = page.getByRole("button", {
+        name: "Account menu",
+        exact: true,
+      });
+      await account.click();
+      const menu = page.getByRole("menu", { name: "Account" });
+      await expect(menu).toContainText("SIGNED IN AS");
+      await expect(menu).toContainText(`${userId}@example.test`);
+      if (route === "compose")
+        expect((await new AxeBuilder({ page }).analyze()).violations).toEqual(
+          [],
+        );
+      await expect(
+        menu.getByRole("menuitem", { name: "Settings", exact: true }),
+      ).toBeFocused();
+      await expect(account).toHaveAttribute("aria-expanded", "true");
+      await expect(account.locator("svg")).toHaveCSS(
+        "transform",
+        "matrix(-1, 0, 0, -1, 0, 0)",
+      );
+      const box = (await menu.boundingBox())!;
+      const trigger = (await account.boundingBox())!;
+      expect(box.width).toBe(290);
+      expect(box.y).toBeCloseTo(trigger.y + trigger.height + 10, 1);
+      expect(box.x + box.width).toBeCloseTo(trigger.x + trigger.width, 1);
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      await page.keyboard.press("ArrowUp");
+      await expect(
+        menu.getByRole("menuitem", { name: "Sign out", exact: true }),
+      ).toBeFocused();
+      await page.keyboard.press("ArrowDown");
+      await expect(
+        menu.getByRole("menuitem", { name: "Settings", exact: true }),
+      ).toBeFocused();
+      await page.keyboard.press("Escape");
+      await expect(menu).toHaveCount(0);
+      await expect(account).toBeFocused();
+      await expect(account).toHaveCSS("outline-width", "2px");
+      await expect(account).toHaveCSS("outline-offset", "2px");
+      await expect(account.locator("svg")).toHaveCSS("transform", "none");
+      await account.click();
+      await page.locator("main h1").click({ position: { x: 5, y: 5 } });
+      await expect(menu).toHaveCount(0);
+      await expect(account).toBeFocused();
+      expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+      if (route !== "compose")
+        await expect(page.locator(".send-checklist")).toHaveCount(0);
+    }
+    await page.goto("/compose");
+    const checklist = page.getByRole("region", { name: "Before you can send" });
+    const rows = checklist.locator("li");
+    const send = page.locator(".compose-send-button");
+    await expect(rows).toHaveCount(4);
+    await expect(rows.nth(0).locator(".sr-only")).toHaveText("Incomplete:");
+    await expect(checklist.locator('[aria-live="polite"]')).toHaveCount(1);
+    await expect(send).toBeDisabled();
+    await expect(checklist).toHaveCSS("font-family", /Plus Jakarta/);
+    const checklistBox = (await checklist.boundingBox())!;
+    const sendBox = (await send.boundingBox())!;
+    expect(checklistBox.y + checklistBox.height).toBeLessThanOrEqual(sendBox.y);
+    await expect(
+      page.getByRole("progressbar", {
+        name: "Last 24 hours + queued",
+        exact: true,
+      }),
+    ).toHaveAttribute("aria-valuenow", "56");
+    await page
+      .getByLabel("Choose a template", { exact: true })
+      .selectOption(templateId);
+    await expect(rows.nth(0)).toHaveAttribute("data-done", "true");
+    await expect(rows.nth(0).locator(".sr-only")).toHaveText("Complete:");
+    await expect(rows.nth(0).locator(".send-checklist-hint")).toHaveCSS(
+      "max-height",
+      "0px",
+    );
+    await expect(send).toBeDisabled();
+    await page.getByRole("checkbox", { name: /^Alex/ }).check();
+    await page.getByRole("checkbox", { name: /^Sam/ }).check();
+    await expect(rows.nth(1)).toHaveAttribute("data-done", "true");
+    await expect(rows.nth(1)).toContainText("2 selected");
+    await expect(rows.nth(2)).toContainText(
+      "Alex, Sam need a role. Use Apply Role to Selected.",
+    );
+    await expect(send).toBeDisabled();
+    await page
+      .getByLabel("Role to Apply to Selected", { exact: true })
+      .fill("Engineer");
+    await page
+      .getByRole("button", { name: "Apply Role to Selected", exact: true })
+      .click();
+    await expect(rows.nth(2)).toHaveAttribute("data-done", "true");
+    await expect(rows.nth(2).locator(".send-checklist-hint")).toHaveCSS(
+      "max-height",
+      "0px",
+    );
+    await expect(send).toBeEnabled();
+    await expect(send).toHaveText("Send to 2 recipients");
+    await expect(rows.nth(3)).toHaveAttribute("data-done", "false");
+    await page
+      .getByRole("checkbox", {
+        name: "Attach Resume",
+        exact: true,
+      })
+      .check();
+    await expect(rows.nth(3)).toHaveAttribute("data-done", "true");
+    await expect(send).toBeEnabled();
+    await page
+      .getByRole("checkbox", {
+        name: "Attach Resume",
+        exact: true,
+      })
+      .uncheck();
+    await expect(send).toBeEnabled();
+    await page.getByLabel("Job Role for Alex", { exact: true }).fill("   ");
+    await expect(rows.nth(2)).toHaveAttribute("data-done", "false");
+    await expect(rows.nth(2)).toContainText(
+      "Alex needs a role. Use Apply Role to Selected.",
+    );
+    await expect(send).toBeDisabled();
+    await page
+      .getByLabel("Job Role for Alex", { exact: true })
+      .fill("Engineer");
+    await page.getByRole("checkbox", { name: /^Previously/ }).check();
+    await expect(rows.nth(1)).toContainText("2 selected");
+    await page
+      .getByRole("checkbox", {
+        name: "Allow a resend to Previously",
+        exact: true,
+      })
+      .check();
+    await expect(rows.nth(1)).toContainText("3 selected");
+    await expect(
+      page.getByRole("checkbox", { name: /^Queued/ }),
+    ).toBeDisabled();
+    await page.getByRole("button", { name: "Select all", exact: true }).click();
+    await expect(rows.nth(1)).toContainText("4 selected");
+    await page
+      .getByRole("button", { name: "Clear selection", exact: true })
+      .click();
+    await expect(rows.nth(1)).toHaveAttribute("data-done", "false");
+    await expect(rows.nth(2)).toHaveAttribute("data-done", "false");
+    await expect(send).toBeDisabled();
+    await page.getByRole("button", { name: "Select all", exact: true }).click();
+    await expect(rows.nth(1)).toContainText("3 selected");
+    await expect(send).toBeEnabled();
+    await expect(rows.locator(".send-checklist-icon").first()).toHaveCSS(
+      "animation-name",
+      "none",
+    );
+    await expect(rows.locator("path").first()).toHaveCSS(
+      "transition-duration",
+      "0s",
+    );
+    await expect(checklist.locator(".send-checklist-glow")).toHaveCSS(
+      "animation-name",
+      "none",
+    );
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({
+      path: testInfo.outputPath(`readiness-${theme}.png`),
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 320, height: 568 });
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBe(320);
+    await page
+      .getByRole("button", { name: "Account menu", exact: true })
+      .click();
+    const narrowMenu = (await page.getByRole("menu").boundingBox())!;
+    expect(narrowMenu.width).toBe(280);
+    expect(narrowMenu.x).toBeGreaterThanOrEqual(20);
+    expect(narrowMenu.x + narrowMenu.width).toBeLessThanOrEqual(300);
+    await page.keyboard.press("Escape");
+  });
+}
+
+test("quota stays shared across navigation and clamps overflow; Gmail status and sign-out work", async ({
+  page,
+  userId,
+}) => {
+  const { templateId, campaignId, contacts } =
+    await seedReadinessWorkspace(userId);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/settings");
+  await expect(page.locator("header").getByRole("progressbar")).toHaveCount(0);
+  await pool.query(
+    'INSERT INTO "Send" (id,"campaignId","contactId",status) VALUES ($1,$2,$3,$4)',
+    [randomUUID(), campaignId, contacts.Queued, "QUEUED"],
+  );
+  await page
+    .getByRole("navigation", { name: "Main navigation" })
+    .getByRole("link", { name: "Compose", exact: true })
+    .click();
+  await expect(
+    page.getByRole("progressbar", {
+      name: "Last 24 hours + queued",
+      exact: true,
+    }),
+  ).toHaveAttribute("aria-valuenow", "57");
+  // Mutate only this test user's count, keeping the schema and quota rules intact.
+  await pool.query(
+    'INSERT INTO "Send" (id,"campaignId","contactId",status) SELECT gen_random_uuid(),$1,$2,\'QUEUED\'::"SendStatus" FROM generate_series(1,444)',
+    [campaignId, contacts.Queued],
+  );
+  await page.reload();
+  const quota = page.getByRole("progressbar", {
+    name: "Last 24 hours + queued",
+    exact: true,
+  });
+  await expect(quota).toHaveAttribute("aria-valuenow", "500");
+  const email = `${userId}.${"long".repeat(20)}@example.test`;
+  await pool.query(
+    'UPDATE "User" SET "gmailAuthorized"=false,email=$2 WHERE id=$1',
+    [userId, email],
+  );
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "Gmail not connected", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".workspace-gmail-dot")).toHaveCSS(
+    "background-color",
+    "rgb(251, 191, 36)",
+  );
+  await page
+    .getByLabel("Choose a template", { exact: true })
+    .selectOption(templateId);
+  await page.getByRole("checkbox", { name: /^Maya/ }).check();
+  await expect(page.locator(".send-checklist")).toHaveAttribute(
+    "data-ready",
+    "true",
+  );
+  await expect(page.locator(".compose-send-button")).toBeDisabled();
+  await page.getByRole("checkbox", { name: /^Maya/ }).uncheck();
+  await page
+    .getByRole("button", { name: "Gmail not connected", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/settings$/);
+  await page
+    .getByRole("navigation", { name: "Main navigation" })
+    .getByRole("link", { name: "Compose", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/compose$/);
+  const account = page.getByRole("button", {
+    name: "Account menu",
+    exact: true,
+  });
+  await account.click();
+  const menu = page.getByRole("menu");
+  await expect(menu.locator(".workspace-account-email")).toHaveText(email);
+  await expect(menu.locator(".workspace-account-email")).toHaveCSS(
+    "text-overflow",
+    "ellipsis",
+  );
+  expect(
+    await menu
+      .locator(".workspace-account-email")
+      .evaluate((element) => element.scrollWidth > element.clientWidth),
+  ).toBe(true);
+  await menu.getByRole("menuitem", { name: "Settings", exact: true }).click();
+  await expect(page).toHaveURL(/\/settings$/);
+  await expect(menu).toHaveCount(0);
+  await expect(account).toBeFocused();
+  await account.click();
+  await menu.getByRole("menuitem", { name: "Sign out", exact: true }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await page.goto("/compose");
+  await expect(page).toHaveURL(/\/$/);
+});
+
+test("checklist animations draw, reverse, stagger and pulse once on readiness", async ({
+  page,
+  userId,
+}) => {
+  const { templateId } = await seedReadinessWorkspace(userId);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("/compose");
+  const checklist = page.locator(".send-checklist");
+  const rows = checklist.locator("li");
+  await expect(checklist.locator(".send-checklist-glow")).toHaveCount(0);
+  await page
+    .getByLabel("Choose a template", { exact: true })
+    .selectOption(templateId);
+  await expect(rows.nth(0).locator(".send-checklist-icon")).toHaveCSS(
+    "animation-name",
+    "checklist-pop",
+  );
+  await expect(rows.nth(0).locator("path")).toHaveCSS(
+    "stroke-dashoffset",
+    "0px",
+  );
+  await expect(rows.nth(0).locator("path")).toHaveCSS(
+    "transition-duration",
+    "0.35s, 0.2s",
+  );
+  await page.getByRole("checkbox", { name: /^Maya/ }).check();
+  await expect(rows.nth(1).locator("path")).toHaveCSS("transition-delay", "0s");
+  await expect(rows.nth(2).locator("path")).toHaveCSS(
+    "transition-delay",
+    "0.06s",
+  );
+  await expect(checklist).toHaveAttribute("data-ready", "true");
+  const glow = checklist.locator(".send-checklist-glow");
+  await expect(glow).toHaveCSS("animation-duration", "0.6s");
+  await expect(page.locator(".compose-send-button")).toBeEnabled();
+  await expect(page.locator(".compose-send-button")).toHaveCSS(
+    "transition-duration",
+    "0.25s, 0.25s, 0.25s, 0.25s",
+  );
+  const originalGlow = await glow.elementHandle();
+  await page
+    .getByRole("checkbox", {
+      name: "Attach Resume",
+      exact: true,
+    })
+    .check();
+  expect(
+    await originalGlow!.evaluate(
+      (element) => element === document.querySelector(".send-checklist-glow"),
+    ),
+  ).toBe(true);
+  await page.getByRole("checkbox", { name: /^Maya/ }).uncheck();
+  await expect(rows.nth(1).locator(".send-checklist-icon")).toHaveCSS(
+    "animation-name",
+    "checklist-unpop",
+  );
+  await expect(rows.nth(1).locator("path")).toHaveCSS(
+    "stroke-dashoffset",
+    "1px",
+  );
+  await expect(rows.nth(2)).toHaveAttribute("data-done", "false");
+  await expect(page.locator(".compose-send-button")).toBeDisabled();
+  await page.getByRole("checkbox", { name: /^Maya/ }).check();
+  expect(await originalGlow!.evaluate((element) => element.isConnected)).toBe(
+    false,
+  );
+  await page.getByLabel("Choose a template", { exact: true }).selectOption("");
+  await expect(rows.nth(0).locator(".send-checklist-hint")).toHaveCSS(
+    "opacity",
+    "1",
+  );
+  await expect(rows.nth(0).locator(".send-checklist-hint")).toHaveCSS(
+    "transition-duration",
+    "0.2s, 0.2s",
+  );
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(rows.nth(0).locator(".send-checklist-icon")).toHaveCSS(
+    "animation-name",
+    "none",
+  );
+  await expect(glow).toHaveCSS("animation-name", "none");
 });

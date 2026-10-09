@@ -1,8 +1,20 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { themeScript } from "@/lib/theme";
 const sans = Inter({ variable: "--font-inter", subsets: ["latin"] });
+const jakarta = Plus_Jakarta_Sans({
+  variable: "--font-jakarta",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  fallback: ["system-ui", "sans-serif"],
+});
+const jetbrains = JetBrains_Mono({
+  variable: "--font-jetbrains",
+  subsets: ["latin"],
+  weight: ["400", "500", "700"],
+  fallback: ["monospace"],
+});
 export const metadata: Metadata = {
   metadataBase: new URL("https://mailloop.in"),
   title: {
@@ -29,7 +41,7 @@ export default function RootLayout({
     <html
       suppressHydrationWarning
       lang="en"
-      className={`${sans.variable} antialiased`}
+      className={`${sans.variable} ${jakarta.variable} ${jetbrains.variable} antialiased`}
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />

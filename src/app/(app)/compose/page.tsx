@@ -3,7 +3,7 @@ import { WorkspaceSkeleton } from "@/components/workspace-skeleton";
 import Form from "next/form";
 import { requireUser } from "@/lib/session";
 import { db } from "@/lib/db";
-import { quotaWhere } from "@/lib/campaigns";
+import { readQuotaUsage } from "@/lib/quota-usage";
 import { PageHeading } from "@/components/common";
 import { Compose } from "@/components/compose";
 import { Input } from "@/components/ui/input";
@@ -53,7 +53,7 @@ async function ComposePageContent({
       skip: (page - 1) * 20,
     }),
     db.contact.count({ where }),
-    db.send.count({ where: quotaWhere(user.id) }),
+    readQuotaUsage(user.id),
     user.currentAttachmentId
       ? db.attachment.findFirst({
           where: { id: user.currentAttachmentId, userId: user.id },

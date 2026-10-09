@@ -57,8 +57,8 @@ export default async function Home({
                 starts with an introduction.
               </h1>
               <p className="mt-6 max-w-md text-base leading-7 text-body">
-                Write once. Make it personal. Send thoughtful cold emails to up
-                to 15 people, individually, from your own Gmail.
+                Write once. Send thoughtful cold emails to up to 15 people at a
+                time, individually, from your own Gmail.
               </p>
               {error && (
                 <p role="alert" className="mt-4 text-sm text-error-deep">

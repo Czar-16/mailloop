@@ -11,6 +11,8 @@ import { Feedback, useUnsavedChanges } from "@/components/forms";
 import { ProgressRing, estimateSeconds } from "@/components/progress-ring";
 import { DateTime } from "@/components/date-time";
 import { RoleChoices } from "@/components/preferences";
+import { SendChecklist } from "@/components/send-checklist";
+import { useWorkspaceQuota } from "@/components/workspace-quota";
 import type { ActionResult } from "@/lib/errors";
 export type ComposeContact = {
   id: string;
@@ -37,6 +39,7 @@ export function Compose({
   connected: boolean;
   roles: string[];
 }) {
+  const displayedQuota = useWorkspaceQuota(used);
   const [templateId, setTemplateId] = useState("");
   const [selected, setSelected] = useState<ComposeContact[]>([]);
   const [role, setRole] = useState("");
@@ -66,6 +69,9 @@ export function Compose({
   const included = selected.filter(
     (c) => !c.blocked && (!c.previouslySent || resendIds.includes(c.id)),
   );
+  const missingRoles = included.filter((contact) => !getRole(contact).trim());
+  const readyToSend =
+    !!template && included.length > 0 && missingRoles.length === 0;
   const filteredContacts = contacts.filter(
     (c) => !roleFilter || getRole(c) === roleFilter,
   );
@@ -509,7 +515,11 @@ export function Compose({
           </p>
           {[
             { label: "Selected recipients", value: included.length, max: 15 },
-            { label: "Last 24 hours + queued", value: used, max: 500 },
+            {
+              label: "Last 24 hours + queued",
+              value: displayedQuota,
+              max: 500,
+            },
           ].map(({ label, value, max }) => (
             <div key={label} className="space-y-2">
               <div className="flex items-center justify-between gap-3 text-sm">
@@ -540,6 +550,12 @@ export function Compose({
             Each recipient gets a separate email from your Gmail. Sends are
             spaced 20–60 seconds apart.
           </p>
+          <SendChecklist
+            templateSelected={!!template}
+            recipientCount={included.length}
+            missingRoles={missingRoles.map((contact) => contact.name)}
+            attachResume={attachResume}
+          />
           {!connected && (
             <p className="text-sm text-warning">
               Reconnect Gmail in{" "}
@@ -551,8 +567,8 @@ export function Compose({
           )}
           <Feedback result={result} />
           <Button
-            className="w-full"
-            disabled={pending || !connected || !included.length}
+            className="compose-send-button w-full"
+            disabled={pending || !connected || !readyToSend}
             onClick={() => {
               if (!template || !included.length) {
                 setResult({

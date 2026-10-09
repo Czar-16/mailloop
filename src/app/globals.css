@@ -1511,3 +1511,346 @@ dialog.tutorial-dialog[data-phase="closing"]::backdrop {
     transition: none !important;
   }
 }
+
+/* Scoped header and Compose readiness presentation. */
+.workspace-header-controls,
+.send-checklist,
+.compose-send-button {
+  font-family: var(--font-jakarta), system-ui, sans-serif;
+}
+.workspace-header-controls {
+  --workspace-track: #e2dcf7;
+  margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  min-width: 0;
+  max-width: 100%;
+}
+[data-theme="dark"] .workspace-header-controls {
+  --workspace-track: #26234d;
+}
+.workspace-header-controls .theme-track {
+  flex-shrink: 0;
+}
+.workspace-header-controls > .inline-flex > span {
+  font-family: var(--font-jakarta), system-ui, sans-serif;
+  font-size: 14px;
+  color: var(--muted-foreground, #55507f);
+}
+.workspace-mono-label {
+  font-family: var(--font-jetbrains), monospace;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.16em;
+  color: var(--muted-foreground, #55507f);
+}
+.workspace-gmail,
+.workspace-account-trigger {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  border: 1px solid var(--border, #d8d1f3);
+  border-radius: 999px;
+  background: var(--card, #fff);
+  color: var(--foreground, #1b1740);
+}
+.workspace-gmail {
+  height: 52px;
+  padding: 0 20px;
+  gap: 10px;
+  font-size: 16px;
+  white-space: nowrap;
+}
+.workspace-gmail-dot {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 0 4px rgb(74 222 128 / 18%);
+}
+.workspace-gmail[data-connected="false"] {
+  cursor: pointer;
+}
+.workspace-gmail[data-connected="false"] .workspace-gmail-dot {
+  background: #fbbf24;
+  box-shadow: 0 0 0 4px rgb(251 191 36 / 18%);
+}
+.workspace-account {
+  position: relative;
+}
+.workspace-account-trigger {
+  height: 52px;
+  padding: 0 14px 0 6px;
+  gap: 8px;
+  cursor: pointer;
+}
+.workspace-avatar {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--link);
+  font-weight: 700;
+}
+.workspace-account-trigger > svg {
+  transition: transform 150ms;
+}
+.workspace-account-trigger[aria-expanded="true"] > svg {
+  transform: rotate(180deg);
+}
+.workspace-account-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 100;
+  width: 290px;
+  max-width: calc(100vw - 40px);
+  padding: 8px;
+  border: 1px solid var(--border, #d8d1f3);
+  border-radius: 20px;
+  background: var(--card, #fff);
+  box-shadow: 0 24px 60px rgb(0 0 0 / 45%);
+  transform-origin: top right;
+  animation: workspace-menu-enter 140ms ease-out;
+}
+.workspace-account-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px 14px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border, #e6e1f8);
+}
+.workspace-account-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 600;
+}
+.workspace-account-menu button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 46px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 12px;
+  gap: 12px;
+  font-size: 15px;
+  font-weight: 400;
+  text-align: left;
+  background: transparent;
+  color: var(--foreground, #1b1740);
+  cursor: pointer;
+}
+.workspace-account-menu button:hover {
+  background: var(--surface, #f7f5ff);
+}
+.workspace-account-menu button > svg {
+  flex-shrink: 0;
+}
+.workspace-header-controls button:focus-visible,
+.compose-send-button:focus-visible {
+  outline: 2px solid var(--accent, #7c4dff);
+  outline-offset: 2px;
+}
+@keyframes workspace-menu-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.send-checklist {
+  --checklist-background: #f7f5ff;
+  --checklist-ring: #cfc7ee;
+  --checklist-ok: #0f9d6e;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px 22px;
+  border: 1px solid
+    var(--line2, var(--recipients-border, var(--border, #d8d1f3)));
+  border-radius: 20px;
+  background: var(--checklist-background);
+  color: var(--recipients-text, var(--foreground, #1b1740));
+}
+[data-theme="dark"] .send-checklist {
+  --checklist-background: #0b0b1f;
+  --checklist-ring: #3a3670;
+  --checklist-ok: #34d399;
+}
+.send-checklist h3 {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+.send-checklist ul {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.send-checklist-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+.send-checklist-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  flex-shrink: 0;
+  color: var(--checklist-ok);
+}
+.send-checklist-empty {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--checklist-ring);
+  border-radius: 50%;
+  opacity: 1;
+  transition: opacity 200ms;
+  transition-delay: var(--checklist-delay);
+}
+.send-checklist-icon svg {
+  position: relative;
+}
+.send-checklist-icon circle,
+.send-checklist-icon path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  opacity: 0;
+  transition:
+    stroke-dashoffset 350ms ease-out,
+    opacity 200ms;
+  transition-delay: var(--checklist-delay);
+}
+.send-checklist-row[data-done="true"] .send-checklist-empty {
+  opacity: 0;
+}
+.send-checklist-row[data-done="true"] circle,
+.send-checklist-row[data-done="true"] path {
+  stroke-dashoffset: 0;
+  opacity: 1;
+}
+.send-checklist-icon[data-phase="done"] {
+  animation: checklist-pop 300ms ease-out backwards;
+  animation-delay: var(--checklist-delay);
+}
+.send-checklist-icon[data-phase="undone"] {
+  animation: checklist-unpop 300ms ease-out backwards;
+  animation-delay: var(--checklist-delay);
+}
+.send-checklist-copy {
+  min-width: 0;
+  font-size: 15px;
+  line-height: 1.5;
+}
+.send-checklist-label {
+  display: block;
+  color: var(--recipients-text-muted, var(--muted-foreground, #55507f));
+  font-weight: 400;
+  transition:
+    color 200ms,
+    font-weight 200ms;
+  transition-delay: var(--checklist-delay);
+}
+.send-checklist-row[data-done="true"] .send-checklist-label {
+  color: var(--recipients-text, var(--foreground, #1b1740));
+  font-weight: 600;
+}
+.send-checklist-hint {
+  display: block;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  max-height: 0;
+  opacity: 0;
+  font-size: 13px;
+  color: var(--recipients-text-muted, var(--muted-foreground, #6b6694));
+  transition:
+    opacity 200ms,
+    max-height 200ms;
+  transition-delay: var(--checklist-delay);
+}
+.send-checklist-hint[data-visible="true"] {
+  max-height: var(--hint-height, 30em);
+  opacity: 1;
+}
+.send-checklist-glow {
+  position: absolute;
+  inset: -1px;
+  border: 1px solid var(--accent);
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  animation: checklist-ready 600ms ease-out;
+}
+.compose-send-button {
+  background: var(--accent);
+  transition:
+    background-color 250ms,
+    color 250ms,
+    opacity 250ms,
+    box-shadow 250ms;
+}
+.compose-send-button:disabled {
+  background: var(--recipients-track, var(--surface));
+  color: var(--recipients-text-muted, var(--muted-foreground));
+  box-shadow: none;
+  opacity: 1;
+}
+@keyframes checklist-pop {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.18);
+  }
+}
+@keyframes checklist-unpop {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.85);
+  }
+}
+@keyframes checklist-ready {
+  0%,
+  100% {
+    opacity: 0;
+    box-shadow: 0 0 0 transparent;
+  }
+  45% {
+    opacity: 1;
+    box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .workspace-header-controls *,
+  .send-checklist *,
+  .compose-send-button {
+    animation: none !important;
+    transition: none !important;
+  }
+}

@@ -1,7 +1,9 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { ChevronDown, LogOut, Settings } from "lucide-react";
+
 export function AccountMenu({
   name,
   email,
@@ -14,90 +16,124 @@ export function AccountMenu({
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const router = useRouter();
+  const focusFrame = useRef<number | undefined>(undefined);
+  useEffect(
+    () => () => {
+      if (focusFrame.current !== undefined)
+        cancelAnimationFrame(focusFrame.current);
+    },
+    [],
+  );
+  const close = useCallback(() => {
+    setOpen(false);
+    trigger.current?.focus({ preventScroll: true });
+    // Pointer defaults can move focus again after the outside-click handler.
+    if (focusFrame.current !== undefined)
+      cancelAnimationFrame(focusFrame.current);
+    focusFrame.current = requestAnimationFrame(() =>
+      trigger.current?.focus({ preventScroll: true }),
+    );
+  }, []);
   useEffect(() => {
     if (!open) return;
-    const outside = (e: PointerEvent) => {
-      if (!root.current?.contains(e.target as Node)) setOpen(false);
+    const outside = (event: PointerEvent) => {
+      if (!root.current?.contains(event.target as Node)) close();
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        close();
+      }
     };
     document.addEventListener("pointerdown", outside);
-    root.current?.querySelector<HTMLElement>("[role=menuitem]")?.focus();
-    return () => document.removeEventListener("pointerdown", outside);
-  }, [open]);
+    document.addEventListener("keydown", escape);
+    root.current?.querySelector<HTMLButtonElement>("[role=menuitem]")?.focus();
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open, close]);
   return (
     <div
       ref={root}
-      className="relative"
-      onKeyDown={(e) => {
-        if (e.key === "Escape") {
-          setOpen(false);
-          trigger.current?.focus();
-        }
-        if (open && ["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) {
-          e.preventDefault();
-          const items = Array.from(
-            root.current?.querySelectorAll<HTMLElement>("[role=menuitem]") ??
-              [],
-          );
-          const index = items.indexOf(document.activeElement as HTMLElement);
-          items[
-            e.key === "Home"
-              ? 0
-              : e.key === "End"
-                ? items.length - 1
-                : (index + (e.key === "ArrowDown" ? 1 : -1) + items.length) %
-                  items.length
-          ]?.focus();
-        }
+      className="workspace-account"
+      onKeyDown={(event) => {
+        if (
+          !open ||
+          !["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)
+        )
+          return;
+        event.preventDefault();
+        const items = Array.from(
+          root.current?.querySelectorAll<HTMLButtonElement>(
+            "[role=menuitem]",
+          ) ?? [],
+        );
+        const index = items.indexOf(
+          document.activeElement as HTMLButtonElement,
+        );
+        items[
+          event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? items.length - 1
+              : (index + (event.key === "ArrowDown" ? 1 : -1) + items.length) %
+                items.length
+        ]?.focus();
       }}
     >
-      <Button
+      <button
         ref={trigger}
+        type="button"
+        className="workspace-account-trigger"
         aria-label="Account menu"
         aria-haspopup="menu"
         aria-expanded={open}
-        variant="outline"
-        className="size-11 rounded-full bg-accent-soft text-link p-0"
-        onClick={() => setOpen(!open)}
-        onKeyDown={(e) => {
-          if (e.key === "ArrowDown") {
-            e.preventDefault();
+        onClick={() => (open ? close() : setOpen(true))}
+        onKeyDown={(event) => {
+          if (!open && ["ArrowDown", "ArrowUp"].includes(event.key)) {
+            event.preventDefault();
             setOpen(true);
           }
         }}
       >
-        {(name?.trim() || email).slice(0, 1).toUpperCase()}
-      </Button>
+        <span className="workspace-avatar">
+          {(name?.trim() || email).slice(0, 1).toUpperCase()}
+        </span>
+        <ChevronDown size={14} strokeWidth={2.4} aria-hidden="true" />
+      </button>
       {open && (
         <div
           role="menu"
           aria-label="Account"
-          className="panel absolute right-0 z-40 mt-2 w-64 max-w-[calc(100vw-48px)] p-4 shadow-lg"
-          onBlur={(e) => {
-            if (!e.currentTarget.contains(e.relatedTarget as Node))
-              setOpen(false);
+          className="workspace-account-menu"
+          onBlur={(event) => {
+            if (!root.current?.contains(event.relatedTarget as Node)) close();
           }}
         >
-          <p className="break-words text-sm font-medium">
-            {name || "Your Account"}
-          </p>
-          <p className="mb-3 break-all text-xs text-body">{email}</p>
-          <Link
+          <div className="workspace-account-heading">
+            <span className="workspace-mono-label">SIGNED IN AS</span>
+            <span className="workspace-account-email" title={email}>
+              {email}
+            </span>
+          </div>
+          <button
+            type="button"
             role="menuitem"
-            href="/settings"
-            className="flex min-h-11 items-center rounded-sm px-3 text-sm hover:bg-muted"
-            onClick={() => setOpen(false)}
+            onClick={() => {
+              close();
+              router.push("/settings");
+            }}
           >
+            <Settings size={18} strokeWidth={1.8} aria-hidden="true" />
             Settings
-          </Link>
-          <form action={signOut}>
-            <Button
-              role="menuitem"
-              variant="ghost"
-              className="w-full justify-start"
-              type="submit"
-            >
-              Sign Out
-            </Button>
+          </button>
+          <form action={signOut} onSubmit={close}>
+            <button type="submit" role="menuitem">
+              <LogOut size={18} strokeWidth={1.8} aria-hidden="true" />
+              Sign out
+            </button>
           </form>
         </div>
       )}
