@@ -46,6 +46,8 @@ next-env.d.ts
 /uploads/
 /playwright-report/
 /test-results/
-# Licensed documentation stays local.
-/.agents/skills/tailwind-4-docs/references/docs/
-/.agents/skills/tailwind-4-docs/references/docs-index.tsx
+# Local development tools
+/.agents/skills/
+/.claude/skills/
+/.windsurf/skills/
+/skills-lock.json
