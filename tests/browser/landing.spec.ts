@@ -1,6 +1,117 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
+test("landing: theme reveal keeps the old theme outside the circle without flashing", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("/");
+  await expect(
+    page.getByRole("button", { name: "Dark theme", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await page.evaluate(() => {
+    const animate = Element.prototype.animate;
+    Element.prototype.animate = function (keyframes, options) {
+      const animation = animate.call(this, keyframes, options);
+      if (
+        typeof options === "object" &&
+        options.pseudoElement === "::view-transition-new(root)"
+      ) {
+        animation.pause();
+        // Hold just before the active interval to catch a pre-animation flash.
+        animation.currentTime = -1;
+      }
+      return animation;
+    };
+  });
+  const viewport = page.viewportSize()!;
+  const clip = { x: 4, y: viewport.height - 6, width: 2, height: 2 };
+  const cornerColor = async () => {
+    const png = (await page.screenshot({ clip })).toString("base64");
+    return page.evaluate(async (png) => {
+      const image = new Image();
+      image.src = `data:image/png;base64,${png}`;
+      await image.decode();
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = 1;
+      const context = canvas.getContext("2d")!;
+      context.drawImage(image, 0, 0, 1, 1);
+      return [...context.getImageData(0, 0, 1, 1).data].slice(0, 3);
+    }, png);
+  };
+  for (const theme of ["light", "dark"] as const) {
+    const oldCorner = await cornerColor();
+    const expectOldCorner = async () => {
+      const color = await cornerColor();
+      for (let channel = 0; channel < 3; channel++) {
+        // Mobile snapshot rasterization may round a channel by one level.
+        expect(
+          Math.abs(color[channel] - oldCorner[channel]),
+        ).toBeLessThanOrEqual(2);
+      }
+    };
+    await page
+      .getByRole("button", {
+        name: `${theme === "light" ? "Light" : "Dark"} theme`,
+        exact: true,
+      })
+      .click();
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          document
+            .getAnimations()
+            .some(
+              (animation) =>
+                (animation.effect as KeyframeEffect).pseudoElement ===
+                  "::view-transition-new(root)" &&
+                animation.playState === "paused",
+            ),
+        ),
+      )
+      .toBe(true);
+    // The DOM already has the new palette, but the first rendered frame must
+    // still show the old theme outside the zero-radius circle.
+    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+    await expectOldCorner();
+    await page.evaluate(() => {
+      const animation = document
+        .getAnimations()
+        .find(
+          (animation) =>
+            (animation.effect as KeyframeEffect).pseudoElement ===
+            "::view-transition-new(root)",
+        )!;
+      animation.currentTime = 375;
+    });
+    await expectOldCorner();
+    await page.evaluate(() => {
+      document
+        .getAnimations()
+        .find(
+          (animation) =>
+            (animation.effect as KeyframeEffect).pseudoElement ===
+            "::view-transition-new(root)",
+        )!
+        .finish();
+    });
+    await expect(page.locator("html")).not.toHaveAttribute("data-theme-reveal");
+    const newCorner = await cornerColor();
+    for (let channel = 0; channel < 3; channel++) {
+      expect(Math.abs(newCorner[channel] - oldCorner[channel])).toBeGreaterThan(
+        100,
+      );
+    }
+    expect(
+      await page.evaluate(() =>
+        document.documentElement.style.getPropertyValue(
+          "--theme-reveal-origin",
+        ),
+      ),
+    ).toBe("");
+  }
+});
+
 for (const theme of ["dark", "light"] as const) {
   test(`landing: ${theme} accessibility, responsiveness, and shared sign-in`, async ({
     page,

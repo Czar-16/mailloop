@@ -63,10 +63,12 @@ function switchTheme(theme: Theme, button: HTMLButtonElement) {
     /* Remains active in this document. */
   }
   const request = ++themeRequest;
+  const root = document.documentElement;
   activeTransition?.skipTransition();
   activeTransition = undefined;
+  root.removeAttribute("data-theme-reveal");
+  root.style.removeProperty("--theme-reveal-origin");
   if (snapshot() === theme) return;
-  const root = document.documentElement;
   if (
     !document.startViewTransition ||
     matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -81,14 +83,26 @@ function switchTheme(theme: Theme, button: HTMLButtonElement) {
     Math.max(x, innerWidth - x),
     Math.max(y, innerHeight - y),
   );
+  // Hide the new snapshot from its first frame, before ready starts the reveal.
+  root.style.setProperty("--theme-reveal-origin", `${x}px ${y}px`);
+  root.setAttribute("data-theme-reveal", "");
   const transition = document.startViewTransition(() => {
     if (request === themeRequest) apply(theme);
   });
   activeTransition = transition;
+  let animation: Animation | undefined;
+  const cleanup = () => {
+    animation?.cancel();
+    if (activeTransition !== transition) return;
+    activeTransition = undefined;
+    root.removeAttribute("data-theme-reveal");
+    root.style.removeProperty("--theme-reveal-origin");
+  };
+  void transition.finished.then(cleanup, cleanup);
   void transition.ready
     .then(() => {
       if (activeTransition !== transition) return;
-      root.animate(
+      animation = root.animate(
         {
           clipPath: [
             `circle(0px at ${x}px ${y}px)`,
@@ -98,12 +112,14 @@ function switchTheme(theme: Theme, button: HTMLButtonElement) {
         {
           duration: 750,
           easing: "cubic-bezier(.65,0,.35,1)",
+          fill: "both",
           pseudoElement: "::view-transition-new(root)",
         },
       );
     })
     .catch(() => {
-      /* Skipped transitions already applied the theme. */
+      // A failed reveal should still leave the selected theme visible.
+      transition.skipTransition();
     });
 }
 export function ThemeControl() {
