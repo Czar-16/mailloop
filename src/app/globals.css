@@ -734,12 +734,25 @@ textarea {
 }
 .compose-hero .infinity-mail-loop {
   --mail-loop-accent: #6d4aff;
-  --mail-loop-dot: #8b6cff;
-  --mail-loop-trail: #8b6cff;
+  --mail-loop-dot: #5b34e6;
+  --mail-loop-trail: #7c5cff;
+  --mail-loop-track-opacity: 0.75;
+  --mail-loop-track-width: 1.5;
+  --mail-loop-node-opacity: 0.18;
+  --mail-loop-pulse-opacity: 0.06;
+  --mail-loop-envelope-fill: #5b34e6;
   --mail-loop-envelope-stroke: #ffffff;
-  --mail-loop-label: #5b5880;
-  --mail-loop-glow-outer: 0.03;
-  --mail-loop-glow-inner: 0.035;
+  --mail-loop-envelope-width: 1.5;
+  --mail-loop-halo-opacity: 0.12;
+  --mail-loop-label: #3f3a6b;
+  --mail-loop-label-weight: 500;
+  --mail-loop-glow-outer: 0.04;
+  --mail-loop-glow-inner: 0.05;
+  --mail-loop-trail-opacity-1: 0.9;
+  --mail-loop-trail-opacity-2: 0.7;
+  --mail-loop-trail-opacity-3: 0.55;
+  --mail-loop-trail-opacity-4: 0.4;
+  --mail-loop-trail-opacity-5: 0.28;
 
   display: block;
   width: 290px;
@@ -749,10 +762,23 @@ html[data-theme="dark"] .compose-hero .infinity-mail-loop {
   --mail-loop-accent: #8b6cff;
   --mail-loop-dot: #c4b5fd;
   --mail-loop-trail: #a78bfa;
+  --mail-loop-track-opacity: 0.35;
+  --mail-loop-track-width: 1;
+  --mail-loop-node-opacity: 0.25;
+  --mail-loop-pulse-opacity: 0.08;
+  --mail-loop-envelope-fill: #8b6cff;
   --mail-loop-envelope-stroke: #ece9ff;
+  --mail-loop-envelope-width: 1;
+  --mail-loop-halo-opacity: 0.18;
   --mail-loop-label: #9a95c4;
+  --mail-loop-label-weight: 400;
   --mail-loop-glow-outer: 0.06;
   --mail-loop-glow-inner: 0.07;
+  --mail-loop-trail-opacity-1: 0.8;
+  --mail-loop-trail-opacity-2: 0.6;
+  --mail-loop-trail-opacity-3: 0.45;
+  --mail-loop-trail-opacity-4: 0.3;
+  --mail-loop-trail-opacity-5: 0.2;
 }
 @media (max-width: 767px) {
   .compose-hero {

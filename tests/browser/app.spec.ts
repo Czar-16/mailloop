@@ -148,10 +148,29 @@ test("Compose infinity mail motion, themes, and reduced motion", async ({
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.setViewportSize({ width: 1024, height: 768 });
+  await page.addInitScript(() =>
+    localStorage.setItem("mailloop-theme", "dark"),
+  );
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.goto("/compose");
   const svg = page.locator(".infinity-mail-loop");
   await expect(svg.locator("animateMotion")).toHaveCount(6);
+  for (const animation of await svg
+    .locator("animateMotion, .mail-loop-node animate")
+    .all()) {
+    await expect(animation).toHaveAttribute("dur", "10s");
+  }
+  await expect(svg.locator("#loop animate")).toHaveAttribute("dur", "5s");
+  const delays = await svg
+    .locator(".mail-loop-trail animateMotion")
+    .evaluateAll((animations) =>
+      animations.map((animation) =>
+        parseFloat(animation.getAttribute("begin")!),
+      ),
+    );
+  for (const [index, original] of [0.12, 0.3, 0.5, 0.7, 0.9].entries()) {
+    expect(delays[index]).toBeCloseTo((original * 10) / 6, 6);
+  }
   await expect(svg).toBeVisible();
   const samples = await svg.evaluate((element) => {
     const svg = element as SVGSVGElement;
@@ -159,13 +178,18 @@ test("Compose infinity mail motion, themes, and reduced motion", async ({
     const path = svg.querySelector<SVGPathElement>("#loop")!;
     const total = path.getTotalLength();
     const envelope = svg.querySelector<SVGGElement>(".mail-loop-envelope")!;
+    const loopSeconds = parseFloat(
+      envelope.querySelector("animateMotion")!.getAttribute("dur")!,
+    );
     const position = (element: SVGGraphicsElement) => {
       const matrix = svg.getCTM()!.inverse().multiply(element.getCTM()!);
       return { x: matrix.e, y: matrix.f, b: matrix.b, c: matrix.c };
     };
     const sample = (time: number) => {
       svg.setCurrentTime(time);
-      const expected = path.getPointAtLength(total * ((time % 6) / 6));
+      const expected = path.getPointAtLength(
+        total * ((time % loopSeconds) / loopSeconds),
+      );
       const actual = position(envelope);
       return {
         error: Math.hypot(actual.x - expected.x, actual.y - expected.y),
@@ -187,7 +211,7 @@ test("Compose infinity mail motion, themes, and reduced motion", async ({
           .getAttribute("keyTimes")!
           .split(";")[2],
       );
-      svg.setCurrentTime(arrival * 6);
+      svg.setCurrentTime(arrival * loopSeconds);
       const point = path.getPointAtLength(arrival * total);
       const actual = position(envelope);
       return {
@@ -198,7 +222,9 @@ test("Compose infinity mail motion, themes, and reduced motion", async ({
         opacity: Number(getComputedStyle(circle).opacity),
       };
     });
-    const motion = [0.5, 1.5, 3, 4.5, 6, 7.5].map(sample);
+    const motion = [1 / 12, 0.25, 0.5, 0.75, 1, 1.25].map((fraction) =>
+      sample(fraction * loopSeconds),
+    );
     // Step two full loops at 60fps, including every center crossing and each
     // trail's wraparound. Sparse position samples can miss a closing-segment hold.
     const continuousMotion = [
@@ -215,7 +241,7 @@ test("Compose infinity mail motion, themes, and reduced motion", async ({
       maximumErrorTime: 0,
       frames: 0,
     }));
-    for (let frame = 0; frame <= 780; frame++) {
+    for (let frame = 0; frame <= (loopSeconds * 2 + 2) * 60; frame++) {
       const time = frame / 60;
       svg.setCurrentTime(time);
       for (const sample of continuousMotion) {
@@ -228,7 +254,7 @@ test("Compose infinity mail motion, themes, and reduced motion", async ({
           continue;
         const actual = position(sample.element);
         const expected = path.getPointAtLength(
-          total * (((time - sample.delay) % 6) / 6),
+          total * (((time - sample.delay) % loopSeconds) / loopSeconds),
         );
         const error = Math.hypot(actual.x - expected.x, actual.y - expected.y);
         if (error > sample.maximumError) sample.maximumErrorTime = time;
@@ -255,7 +281,9 @@ test("Compose infinity mail motion, themes, and reduced motion", async ({
       const delay = parseFloat(
         dot.querySelector("animateMotion")!.getAttribute("begin")!,
       );
-      const expected = path.getPointAtLength(total * ((2 - delay) / 6));
+      const expected = path.getPointAtLength(
+        total * ((2 - delay) / loopSeconds),
+      );
       const actual = position(dot);
       return {
         error: Math.hypot(actual.x - expected.x, actual.y - expected.y),
@@ -275,7 +303,8 @@ test("Compose infinity mail motion, themes, and reduced motion", async ({
           frames,
         }),
       ),
-      expectedStep: total / 360,
+      expectedStep: total / (loopSeconds * 60),
+      loopFrames: loopSeconds * 60,
     };
   });
   await testInfo.attach("mail-loop-motion-samples", {
@@ -284,7 +313,7 @@ test("Compose infinity mail motion, themes, and reduced motion", async ({
   });
   expect(samples.initiallyHidden).toBe(true);
   for (const sample of samples.continuousMotion) {
-    expect(sample.frames).toBeGreaterThan(720);
+    expect(sample.frames).toBeGreaterThan(samples.loopFrames * 2);
     expect(sample.minimumStep).toBeGreaterThan(samples.expectedStep * 0.4);
     expect(sample.maximumError).toBeLessThan(0.2);
   }
@@ -324,6 +353,98 @@ test("Compose infinity mail motion, themes, and reduced motion", async ({
           .map((animation) => animation.finished.catch(() => {})),
       );
     });
+    const light = theme === "Light";
+    // The theme changes opacity values without restarting the timeline.
+    expect(
+      await svg.evaluate((element) =>
+        (element as SVGSVGElement).getCurrentTime(),
+      ),
+    ).toBeCloseTo(2, 5);
+    // Both pulses are at rest here and every delayed trail has started.
+    await svg.evaluate((element) =>
+      (element as SVGSVGElement).setCurrentTime(4),
+    );
+    await expect(svg.locator("#loop")).toHaveCSS(
+      "stroke-width",
+      light ? "1.5px" : "1px",
+    );
+    await expect(svg.locator("#loop")).toHaveCSS(
+      "stroke-opacity",
+      light ? "0.75" : "0.35",
+    );
+    const glows = svg.locator(":scope > circle");
+    await expect(glows.nth(0)).toHaveCSS("opacity", light ? "0.04" : "0.06");
+    await expect(glows.nth(1)).toHaveCSS("opacity", light ? "0.05" : "0.07");
+    for (const node of await svg.locator(".mail-loop-node").all()) {
+      await expect(node.locator("circle").nth(0)).toHaveCSS(
+        "opacity",
+        light ? "0.18" : "0.25",
+      );
+      await expect(node.locator("circle").nth(1)).toHaveCSS(
+        "fill",
+        light ? "rgb(91, 52, 230)" : "rgb(196, 181, 253)",
+      );
+      await expect(node.locator("text")).toHaveCSS(
+        "fill",
+        light ? "rgb(63, 58, 107)" : "rgb(154, 149, 196)",
+      );
+      await expect(node.locator("text")).toHaveCSS(
+        "font-weight",
+        light ? "500" : "400",
+      );
+    }
+    const body = svg.locator(".mail-loop-envelope rect");
+    await expect(body).toHaveCSS(
+      "fill",
+      light ? "rgb(91, 52, 230)" : "rgb(139, 108, 255)",
+    );
+    await expect(body).toHaveCSS(
+      "stroke",
+      light ? "rgb(255, 255, 255)" : "rgb(236, 233, 255)",
+    );
+    await expect(body).toHaveCSS("stroke-width", light ? "1.5px" : "1px");
+    await expect(svg.locator(".mail-loop-envelope circle")).toHaveCSS(
+      "opacity",
+      light ? "0.12" : "0.18",
+    );
+    const trailOpacities = light
+      ? [0.9, 0.7, 0.55, 0.4, 0.28]
+      : [0.8, 0.6, 0.45, 0.3, 0.2];
+    for (const [index, opacity] of trailOpacities.entries()) {
+      const trail = svg.locator(".mail-loop-trail").nth(index);
+      await expect(trail).toHaveCSS("opacity", String(opacity));
+      await expect(trail).toHaveCSS(
+        "fill",
+        light
+          ? index < 2
+            ? "rgb(91, 52, 230)"
+            : "rgb(124, 92, 255)"
+          : index < 2
+            ? "rgb(196, 181, 253)"
+            : "rgb(167, 139, 250)",
+      );
+    }
+    const pulseOpacities = await svg.evaluate((element) => {
+      const svg = element as SVGSVGElement;
+      const opacities = [
+        ...svg.querySelectorAll<SVGCircleElement>(
+          ".mail-loop-node > circle:first-child",
+        ),
+      ].map((circle) => {
+        const animation = circle.querySelector("animate")!;
+        const arrival = Number(
+          animation.getAttribute("keyTimes")!.split(";")[2],
+        );
+        svg.setCurrentTime(
+          arrival * parseFloat(animation.getAttribute("dur")!),
+        );
+        return Number(getComputedStyle(circle).opacity);
+      });
+      svg.setCurrentTime(2);
+      return opacities;
+    });
+    for (const opacity of pulseOpacities)
+      expect(opacity).toBeCloseTo(light ? 0.06 : 0.08, 3);
     const hero = await page.locator(".compose-hero").boundingBox();
     const search = await page
       .locator('label[for="compose-search"]')

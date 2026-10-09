@@ -4,17 +4,17 @@ import { useEffect, useId, useRef, useState } from "react";
 
 const LOOP_PATH =
   "M150,90 C180,50 250,40 260,90 C270,140 190,130 150,90 C110,50 40,40 40,90 C40,140 110,130 150,90 Z";
-const CYCLE_SECONDS = 6;
+const LOOP_SECONDS = 10;
 // Pace motion by distance along the path, including its zero-length closing
 // segment, so all movers maintain constant speed across the repeat boundary.
 const MOTION_MODE = "paced";
 const TRAIL = [
-  { delay: 0.12, radius: 4, opacity: 0.8, color: "var(--mail-loop-dot)" },
-  { delay: 0.3, radius: 3.5, opacity: 0.6, color: "var(--mail-loop-dot)" },
-  { delay: 0.5, radius: 3, opacity: 0.45, color: "var(--mail-loop-trail)" },
-  { delay: 0.7, radius: 2.5, opacity: 0.3, color: "var(--mail-loop-trail)" },
-  { delay: 0.9, radius: 2, opacity: 0.2, color: "var(--mail-loop-trail)" },
-];
+  { delay: 0.12, radius: 4, color: "var(--mail-loop-dot)" },
+  { delay: 0.3, radius: 3.5, color: "var(--mail-loop-dot)" },
+  { delay: 0.5, radius: 3, color: "var(--mail-loop-trail)" },
+  { delay: 0.7, radius: 2.5, color: "var(--mail-loop-trail)" },
+  { delay: 0.9, radius: 2, color: "var(--mail-loop-trail)" },
+].map((dot) => ({ ...dot, delay: (dot.delay / 6) * LOOP_SECONDS }));
 
 export function InfinityMailLoop() {
   const titleId = useId();
@@ -26,6 +26,34 @@ export function InfinityMailLoop() {
     them: number;
     you: number;
   } | null>(null);
+  const [opacities, setOpacities] = useState<{
+    node: string;
+    pulse: string;
+    trail: string[];
+  } | null>(null);
+
+  useEffect(() => {
+    // SMIL numeric values cannot use var(). Read their theme tokens without
+    // resetting the shared motion timeline when the theme changes.
+    const update = () => {
+      const style = getComputedStyle(svgRef.current!);
+      const value = (name: string) => style.getPropertyValue(name).trim();
+      setOpacities({
+        node: value("--mail-loop-node-opacity"),
+        pulse: value("--mail-loop-pulse-opacity"),
+        trail: TRAIL.map((_, index) =>
+          value(`--mail-loop-trail-opacity-${index + 1}`),
+        ),
+      });
+    };
+    update();
+    const observer = new MutationObserver(update);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -53,8 +81,8 @@ export function InfinityMailLoop() {
     if (motion && !motion.reduced) svgRef.current?.setCurrentTime(0);
   }, [motion]);
 
-  const animated = motion !== null && !motion.reduced;
-  const duration = `${CYCLE_SECONDS}s`;
+  const animated = motion !== null && !motion.reduced && opacities !== null;
+  const duration = `${LOOP_SECONDS}s`;
 
   return (
     <svg
@@ -90,8 +118,8 @@ export function InfinityMailLoop() {
         d={LOOP_PATH}
         fill="none"
         stroke="var(--mail-loop-accent)"
-        strokeWidth="1"
-        opacity="0.35"
+        strokeWidth="var(--mail-loop-track-width)"
+        strokeOpacity="var(--mail-loop-track-opacity)"
         strokeDasharray="2 7"
         strokeLinecap="round"
       >
@@ -100,7 +128,7 @@ export function InfinityMailLoop() {
             attributeName="stroke-dashoffset"
             from="0"
             to="-45"
-            dur="3s"
+            dur={`${LOOP_SECONDS / 2}s`}
             calcMode="linear"
             repeatCount="indefinite"
           />
@@ -115,7 +143,7 @@ export function InfinityMailLoop() {
         const keyTimes =
           arrival === undefined
             ? undefined
-            : `0;${arrival - 0.48 / CYCLE_SECONDS};${arrival};${arrival + 0.6 / CYCLE_SECONDS};1`;
+            : `0;${arrival - 0.48 / LOOP_SECONDS};${arrival};${arrival + 0.6 / LOOP_SECONDS};1`;
         return (
           <g key={label} className="mail-loop-node">
             <circle
@@ -123,7 +151,7 @@ export function InfinityMailLoop() {
               cy="90"
               r="10"
               fill="var(--mail-loop-accent)"
-              opacity="0.25"
+              opacity="var(--mail-loop-node-opacity)"
             >
               {animated && (
                 <>
@@ -136,8 +164,9 @@ export function InfinityMailLoop() {
                     repeatCount="indefinite"
                   />
                   <animate
+                    key={`${opacities.node}-${opacities.pulse}`}
                     attributeName="opacity"
-                    values="0.25;0.25;0.08;0.25;0.25"
+                    values={`${opacities.node};${opacities.node};${opacities.pulse};${opacities.node};${opacities.node}`}
                     keyTimes={keyTimes}
                     dur={duration}
                     calcMode="linear"
@@ -151,6 +180,7 @@ export function InfinityMailLoop() {
               x={x}
               y="122"
               fontSize="12"
+              fontWeight="var(--mail-loop-label-weight)"
               fill="var(--mail-loop-label)"
               textAnchor="middle"
             >
@@ -160,7 +190,7 @@ export function InfinityMailLoop() {
         );
       })}
       {animated &&
-        TRAIL.map(({ delay, radius, opacity, color }) => (
+        TRAIL.map(({ delay, radius, color }, index) => (
           <circle
             key={delay}
             className="mail-loop-trail"
@@ -169,8 +199,9 @@ export function InfinityMailLoop() {
             opacity="0"
           >
             <set
+              key={opacities.trail[index]}
               attributeName="opacity"
-              to={opacity}
+              to={opacities.trail[index]}
               begin={`${delay}s`}
               fill="freeze"
             />
@@ -188,16 +219,20 @@ export function InfinityMailLoop() {
         className="mail-loop-envelope"
         transform={animated ? undefined : "translate(150 90)"}
       >
-        <circle r="16" fill="var(--mail-loop-accent)" opacity="0.18" />
+        <circle
+          r="16"
+          fill="var(--mail-loop-accent)"
+          opacity="var(--mail-loop-halo-opacity)"
+        />
         <rect
           x="-11"
           y="-8"
           width="22"
           height="16"
           rx="3"
-          fill="var(--mail-loop-accent)"
+          fill="var(--mail-loop-envelope-fill)"
           stroke="var(--mail-loop-envelope-stroke)"
-          strokeWidth="1"
+          strokeWidth="var(--mail-loop-envelope-width)"
         />
         <polyline
           points="-10,-6 0,2 10,-6"
