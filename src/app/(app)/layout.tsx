@@ -27,7 +27,12 @@ async function AuthenticatedLayout({
       <WorkspaceQuotaProvider used={used}>
         <header className="">
           <div className="page-container flex flex-wrap items-center justify-between gap-3 pt-[18px]">
-            <Wordmark />
+            <div className="workspace-header-brand">
+              <Wordmark />
+              <p className="workspace-brand-tagline">
+                Personalized outreach, made easy.
+              </p>
+            </div>
             <div className="workspace-header-controls">
               <GmailStatus
                 connected={user.gmailAuthorized && !!user.encryptedRefreshToken}
@@ -56,9 +61,35 @@ async function AuthenticatedLayout({
           {!user.preferredRoles.length && <RoleSetup />}
           <PageTransition>{children}</PageTransition>
         </main>
-        <footer className="page-container border-t border-border py-6 text-xs text-body">
-          <span translate="no">Mailloop</span> · Thoughtful outreach, one
-          introduction at a time.
+        <footer className="page-container workspace-footer">
+          <div className="workspace-footer-content">
+            <div className="workspace-footer-brand">
+              <Wordmark />
+              <p className="workspace-brand-tagline">
+                Personalized outreach, made easy.
+              </p>
+            </div>
+            <a
+              className="workspace-footer-credit"
+              href="https://x.com/itsCzar16"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Made by Czar16 — visit Czar16 on X (opens in a new tab)"
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.64 7.584H.47l8.6-9.835L0 1.154h7.594l5.243 6.932 6.064-6.933Zm-1.29 19.49h2.039L6.487 3.24H4.3l13.31 17.403Z" />
+              </svg>
+              <span>
+                Made by <span translate="no">Czar16</span>
+              </span>
+            </a>
+          </div>
         </footer>
         <HelpTutorial />
       </WorkspaceQuotaProvider>

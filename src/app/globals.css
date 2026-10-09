@@ -1513,6 +1513,80 @@ dialog.tutorial-dialog[data-phase="closing"]::backdrop {
 }
 
 /* Scoped header and Compose readiness presentation. */
+.workspace-header-brand,
+.workspace-footer-brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  max-width: 100%;
+}
+.workspace-header-brand > a,
+.workspace-footer-brand > a {
+  flex-shrink: 0;
+}
+.workspace-brand-tagline {
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--body);
+}
+.workspace-footer-content {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  border-top: 1px solid var(--border);
+  padding-block: 28px;
+}
+.workspace-footer-brand {
+  gap: 12px;
+}
+.workspace-footer-brand > a {
+  font-size: 16px;
+}
+.workspace-footer .logo-mark {
+  width: 26px;
+  height: 26px;
+}
+.workspace-footer .logo-mark svg {
+  width: 14px;
+  height: 14px;
+}
+.workspace-footer .workspace-brand-tagline {
+  font-size: 12px;
+}
+.workspace-footer-credit {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--body);
+  transition: color 150ms ease;
+}
+.workspace-footer-credit:hover {
+  color: var(--link);
+}
+.workspace-footer-credit:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+@media (width < 640px) {
+  .workspace-header-brand,
+  .workspace-footer-brand,
+  .workspace-footer-content {
+    gap: 12px;
+  }
+  .workspace-header-brand .workspace-brand-tagline,
+  .workspace-footer .workspace-brand-tagline {
+    font-size: 12px;
+  }
+}
 .workspace-header-controls,
 .send-checklist,
 .compose-send-button {
