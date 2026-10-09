@@ -946,6 +946,7 @@ body:has(.help-launcher) footer.page-container {
   animation: help-pop 0.6s 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
 }
 .help-dismiss {
+  --button-transform-duration: 150ms;
   position: absolute;
   top: -6px;
   left: -6px;
@@ -1243,6 +1244,7 @@ dialog.tutorial-dialog[data-phase="closing"]::backdrop {
   animation: tutorial-step-in 0.24s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
 }
 .tutorial-arrow {
+  --button-transform-duration: 200ms;
   position: absolute;
   z-index: 1;
   top: calc(50% - 19px);
@@ -1324,6 +1326,7 @@ dialog.tutorial-dialog[data-phase="closing"]::backdrop {
   transform: scaleX(1);
 }
 .tutorial-done {
+  --button-transform-duration: 200ms;
   position: absolute;
   right: 16px;
   padding: 9px 16px;
@@ -2126,5 +2129,62 @@ dialog.tutorial-dialog[data-phase="closing"]::backdrop {
   to {
     opacity: 0;
     visibility: visible;
+  }
+}
+
+/* Include native controls and links styled as buttons without moving other links. */
+:is(button, .button-interaction, .landing-button) {
+  --button-interaction-color: var(--landing-accent, var(--accent));
+  transition:
+    translate 180ms ease,
+    filter 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease,
+    transform var(--button-transform-duration, 180ms) ease;
+}
+.button-interaction.bg-destructive {
+  --button-interaction-color: var(--destructive);
+}
+:is(button, .button-interaction, .landing-button):focus-visible:not(
+    :disabled
+  ):not([aria-disabled="true"]):not([aria-busy="true"]) {
+  filter: drop-shadow(
+    0 3px 9px
+      color-mix(in srgb, var(--button-interaction-color) 24%, transparent)
+  );
+}
+@media (hover: hover) and (pointer: fine) {
+  :is(button, .button-interaction, .landing-button):hover:not(:disabled):not(
+      [aria-disabled="true"]
+    ):not([aria-busy="true"]) {
+    translate: 0 -2px;
+    filter: drop-shadow(
+      0 3px 9px
+        color-mix(in srgb, var(--button-interaction-color) 24%, transparent)
+    );
+  }
+  :is(button, .button-interaction, .landing-button):active:not(:disabled):not(
+      [aria-disabled="true"]
+    ):not([aria-busy="true"]) {
+    translate: 0 0;
+  }
+}
+.button-spinner {
+  animation: button-spin 1s linear infinite;
+}
+@keyframes button-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(button, .button-interaction, .landing-button) {
+    translate: none !important;
+    transition: none !important;
+  }
+  .button-spinner {
+    animation: none;
   }
 }

@@ -8,7 +8,7 @@ import { PageHeading } from "@/components/common";
 import { InfinityMailLoop } from "@/components/InfinityMailLoop";
 import { Compose } from "@/components/compose";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { SearchButton } from "@/components/search-button";
 import { Pagination } from "@/components/pagination";
 import { pageNumber } from "@/lib/params";
 export const metadata = { title: "Compose" };
@@ -117,9 +117,7 @@ async function ComposePageContent({
           autoComplete="off"
           placeholder="Find a recipient by name, email, or company…"
         />
-        <Button variant="outline" type="submit">
-          Search
-        </Button>
+        <SearchButton />
       </Form>
       <Compose
         templates={templates}

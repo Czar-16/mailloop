@@ -183,11 +183,12 @@ html[data-theme="dark"]:has(.landing) {
   font-weight: 600;
   cursor: pointer;
   transition:
+    translate 180ms ease,
+    filter 180ms ease,
     transform 0.2s ease,
     box-shadow 0.2s ease;
 }
 .landing-button:hover {
-  transform: translateY(-2px);
   box-shadow: 0 6px 24px
     color-mix(in srgb, var(--landing-violet) 24%, transparent);
 }

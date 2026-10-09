@@ -81,6 +81,173 @@ const test = base.extend<{ userId: string }>({
     });
   },
 });
+test("button effects and recipient search pending feedback", async ({
+  page,
+  userId,
+}) => {
+  await pool.query(
+    'INSERT INTO "Contact" (id,"userId",name,email) VALUES ($1,$2,$3,$4)',
+    [randomUUID(), userId, "Ada Search", "ada-search@example.test"],
+  );
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("/compose");
+  const search = page.getByRole("button", { name: "Search", exact: true });
+  if (test.info().project.name === "desktop") {
+    for (const control of [
+      search,
+      page.getByRole("button", { name: "Account menu" }),
+    ]) {
+      await control.hover();
+      await expect(control).toHaveCSS("translate", "0px -2px");
+      await expect(control).not.toHaveCSS("filter", "none");
+      await page.mouse.down();
+      await expect(control).toHaveCSS("translate", "0px");
+      await page.mouse.up();
+    }
+    await page.mouse.click(0, 0);
+  }
+  const width = (await search.boundingBox())!.width;
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/compose?**", async (route) => {
+    if (new URL(route.request().url()).searchParams.get("q") === "Ada")
+      await gate;
+    await route.continue();
+  });
+  try {
+    await page.getByLabel("Search recipients").fill("Ada");
+    await search.click();
+    const searching = page.getByRole("button", {
+      name: "Searching…",
+      exact: true,
+    });
+    await expect(searching).toBeDisabled();
+    await expect(searching).toHaveAttribute("aria-busy", "true");
+    await expect(searching.locator("svg")).toHaveCSS(
+      "animation-name",
+      "button-spin",
+    );
+    await expect(searching).toHaveCSS("translate", "none");
+    expect((await searching.boundingBox())!.width).toBe(width);
+  } finally {
+    release();
+  }
+  await expect(page).toHaveURL(/q=Ada/);
+  await expect(search).toBeEnabled();
+  await expect(
+    page.getByRole("checkbox", { name: /Ada Search/ }),
+  ).toBeVisible();
+  await page.getByLabel("Search recipients").fill("No matching recipient");
+  await search.click();
+  await expect(page.getByRole("checkbox", { name: /Ada Search/ })).toHaveCount(
+    0,
+  );
+  await expect(search).toBeEnabled();
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await search.hover();
+  await expect(search).toHaveCSS("translate", "none");
+  await expect(search).toHaveCSS("transition-duration", "0s");
+});
+
+test("reply check pending feedback and stable responsive alignment", async ({
+  page,
+  userId,
+}) => {
+  expect(userId).toBeTruthy();
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("/history");
+  const controls = page.locator(".history-controls");
+  const button = controls.getByRole("button");
+  const before = await controls.boundingBox();
+  let attempts = 0;
+  let release!: () => void;
+  let gate: Promise<void>;
+  let ok = true;
+  await page.route("**/history", async (route) => {
+    if (
+      route.request().method() !== "POST" ||
+      !route.request().headers()["next-action"]
+    ) {
+      await route.continue();
+      return;
+    }
+    attempts++;
+    await gate;
+    await route.fulfill({
+      contentType: "text/x-component",
+      body:
+        '0:{"a":"$@1","f":"","b":""}\n1:' +
+        JSON.stringify({
+          ok,
+          message: ok
+            ? "Reply check queued. History updates automatically."
+            : "Could not queue a reply check. Please try again.",
+        }) +
+        "\n",
+    });
+  });
+  for (ok of [true, false]) {
+    gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    try {
+      await button.click();
+      await expect(button).toHaveText("Queuing Check…");
+      await expect(button).toBeDisabled();
+      await expect(button).toHaveAttribute("aria-busy", "true");
+      await expect(button.locator("svg")).toHaveCSS(
+        "animation-name",
+        "button-spin",
+      );
+      await expect(
+        controls.getByText(
+          "Reply check queued. History updates automatically.",
+          { exact: true },
+        ),
+      ).toHaveCount(0);
+    } finally {
+      release();
+    }
+    await expect(button).toHaveText("Check Replies");
+    await expect(button).toBeEnabled();
+    await expect(
+      controls.getByText(
+        ok
+          ? "Reply check queued. History updates automatically."
+          : "Could not queue a reply check. Please try again.",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    const after = await controls.boundingBox();
+    expect(after!.x).toBeCloseTo(before!.x, 0);
+    expect(after!.width).toBeCloseTo(before!.width, 0);
+    expect(after!.height).toBeCloseTo(before!.height, 0);
+    const buttonBounds = (await button.boundingBox())!;
+    if (test.info().project.name === "desktop") {
+      expect(buttonBounds.x + buttonBounds.width).toBeCloseTo(
+        after!.x + after!.width,
+        0,
+      );
+    } else {
+      expect(buttonBounds.x).toBeCloseTo(after!.x, 0);
+    }
+    if (ok) {
+      await page.screenshot({
+        path: test.info().outputPath("history-feedback.png"),
+      });
+    }
+  }
+  expect(attempts).toBe(2);
+  await expect(controls.getByRole("alert")).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+});
+
 base("public landing and protected-route authentication", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toContainText(
@@ -3010,7 +3177,15 @@ test("help dismissal animation survives navigation and ignores repeated interact
     exact: true,
   });
   await expect(badge).toBeVisible();
-  await expect(badge).toHaveCSS("transition-duration", "0.15s");
+  expect(
+    await badge.evaluate((element) => {
+      const style = getComputedStyle(element);
+      const properties = style.transitionProperty.split(", ");
+      return style.transitionDuration.split(", ")[
+        properties.indexOf("transform")
+      ];
+    }),
+  ).toBe("0.15s");
   await badge.hover();
   await expect(badge).toHaveCSS("transform", "matrix(1.1, 0, 0, 1.1, 0, 0)");
   expect(

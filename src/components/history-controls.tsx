@@ -27,11 +27,15 @@ export function HistoryControls({
     return () => clearInterval(interval);
   }, [hasQueued, autoRefresh, router]);
   return (
-    <div className="space-y-2">
+    <div className="history-controls flex w-full max-w-full flex-col items-start gap-2 self-start sm:w-80 sm:items-end sm:text-right">
       <Button
         variant="outline"
+        className="min-w-48"
         disabled={pending}
-        onClick={() =>
+        aria-busy={pending}
+        onClick={() => {
+          if (pending) return;
+          setResult(undefined);
           start(async () => {
             try {
               setResult(await refreshReplies());
@@ -43,13 +47,18 @@ export function HistoryControls({
                   "Could not queue a reply check. Verify Inngest is running.",
               });
             }
-          })
-        }
+          });
+        }}
       >
-        <RefreshCw aria-hidden="true" />
+        <RefreshCw
+          className={pending ? "button-spinner" : undefined}
+          aria-hidden="true"
+        />
         {pending ? "Queuing Check…" : "Check Replies"}
       </Button>
-      <Feedback result={result} />
+      <div className="min-h-10 w-full break-words">
+        <Feedback result={result} />
+      </div>
     </div>
   );
 }
