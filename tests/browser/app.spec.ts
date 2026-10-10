@@ -1,5 +1,10 @@
 import "dotenv/config";
-import { test as base, expect, type Locator } from "@playwright/test";
+import {
+  test as base,
+  expect,
+  type Locator,
+  type Route,
+} from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { Pool } from "pg";
 import { randomUUID } from "node:crypto";
@@ -3998,6 +4003,13 @@ test("shortlist follow-up persistence and isolated preview roles", async ({
       exact: true,
     })
     .click();
+  await page
+    .getByRole("dialog", {
+      name: "Remove Person 10 from shortlist?",
+      exact: true,
+    })
+    .getByRole("button", { name: "Remove", exact: true })
+    .click();
   await expect(page.getByRole("checkbox", { name: /^Person 10/ })).toHaveCount(
     0,
   );
@@ -4315,9 +4327,88 @@ test("compose highlights personalization and persists shortlist removal and re-a
       });
     expect(colors.actual).toBe(colors.expected);
   }
-  await page
-    .getByRole("button", { name: "Remove Alex from shortlist", exact: true })
+  const removeAlex = page.getByRole("button", {
+    name: "Remove Alex from shortlist",
+    exact: true,
+  });
+  const confirmation = page.getByRole("dialog", {
+    name: "Remove Alex from shortlist?",
+    exact: true,
+  });
+  let removalRequests = 0;
+  let failRemoval = true;
+  let pendingRemoval: Route | undefined;
+  await page.route("**/compose", async (route) => {
+    if (
+      route.request().method() !== "POST" ||
+      !route.request().headers()["next-action"]
+    ) {
+      await route.continue();
+      return;
+    }
+    removalRequests++;
+    if (failRemoval) {
+      failRemoval = false;
+      await route.abort("failed");
+    } else {
+      pendingRemoval = route;
+    }
+  });
+  await removeAlex.click();
+  await expect(confirmation).toBeVisible();
+  await expect(
+    confirmation.getByRole("button", { name: "Cancel", exact: true }),
+  ).toBeFocused();
+  await expect(confirmation).toContainText(
+    "Their contact and email history will be kept.",
+  );
+  await confirmation
+    .getByRole("button", { name: "Cancel", exact: true })
     .click();
+  await expect(confirmation).not.toBeVisible();
+  await expect(removeAlex).toBeFocused();
+  await expect(page.getByRole("checkbox", { name: /^Alex/ })).toBeChecked();
+  await expect(page.getByText("2 / 15 selected")).toBeVisible();
+  await removeAlex.click();
+  await page.keyboard.press("Escape");
+  await expect(confirmation).not.toBeVisible();
+  await expect(removeAlex).toBeFocused();
+  expect(removalRequests).toBe(0);
+  const preserved = await pool.query(
+    'SELECT "shortlistRemovedAt" FROM "Contact" WHERE id=$1 AND "userId"=$2',
+    [contactId, userId],
+  );
+  expect(preserved.rows[0].shortlistRemovedAt).toBeNull();
+  await removeAlex.click();
+  await confirmation
+    .getByRole("button", { name: "Remove", exact: true })
+    .click();
+  await expect(confirmation).toContainText(
+    "Could not remove this person. Try again.",
+  );
+  await expect(confirmation).toBeVisible();
+  await expect(
+    confirmation.getByRole("button", { name: "Remove", exact: true }),
+  ).toBeEnabled();
+  await confirmation
+    .getByRole("button", { name: "Remove", exact: true })
+    .click();
+  await expect.poll(() => Boolean(pendingRemoval)).toBe(true);
+  await expect(
+    confirmation.getByRole("button", { name: "Removing…", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    confirmation.getByRole("button", { name: "Cancel", exact: true }),
+  ).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await expect(confirmation).toBeVisible();
+  expect(removalRequests).toBe(2);
+  await pendingRemoval!.continue();
+  await page.unroute("**/compose");
+  await expect(confirmation).not.toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Your shortlist", exact: true }),
+  ).toBeFocused();
   await expect(page.getByRole("checkbox", { name: /^Alex/ })).toHaveCount(0);
   await expect(page.getByText("1 / 15 selected")).toBeVisible();
   await expect(page.getByLabel("Role for Sam", { exact: true })).toHaveValue(

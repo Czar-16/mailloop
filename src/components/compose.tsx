@@ -57,6 +57,12 @@ export function Compose({
   const [result, setResult] = useState<ActionResult>();
   const [pending, start] = useTransition();
   const [removingId, setRemovingId] = useState("");
+  const [removalContact, setRemovalContact] = useState<ComposeContact>();
+  const removalDialog = useRef<HTMLDialogElement>(null);
+  const removalTrigger = useRef<HTMLButtonElement>(null);
+  const shortlistSection = useRef<HTMLElement>(null);
+  const removalInFlight = useRef(false);
+  const removalSucceeded = useRef(false);
   const [removalResult, setRemovalResult] = useState<ActionResult>();
   const [removing, startRemoval] = useTransition();
   const [idempotencyKey, setKey] = useState("");
@@ -102,6 +108,44 @@ export function Compose({
       setResendIds(resendIds.filter((id) => id !== contact.id));
     } else if (selected.length < 15) setSelected([...selected, contact]);
     setKey("");
+  }
+  function confirmRemoval() {
+    if (!removalContact || busy || removalInFlight.current) return;
+    const c = removalContact;
+    removalInFlight.current = true;
+    setRemovingId(c.id);
+    setRemovalResult(undefined);
+    startRemoval(async () => {
+      try {
+        const response = await removeFromShortlist(c.id);
+        setRemovalResult(response);
+        if (response.ok) {
+          setSelected((current) =>
+            current.filter((person) => person.id !== c.id),
+          );
+          setResendIds((current) => current.filter((id) => id !== c.id));
+          setRecipientRoles((current) => {
+            const next = { ...current };
+            delete next[c.id];
+            return next;
+          });
+          setPreviewId((current) => (current === c.id ? "" : current));
+          setResult(undefined);
+          setKey("");
+          removalSucceeded.current = true;
+          removalDialog.current?.close();
+          router.refresh();
+        }
+      } catch {
+        setRemovalResult({
+          ok: false,
+          message: "Could not remove this person. Try again.",
+        });
+      } finally {
+        setRemovingId("");
+        removalInFlight.current = false;
+      }
+    });
   }
   return (
     <div className="compose-grid">
@@ -190,7 +234,12 @@ export function Compose({
             />
           </div>
         </section>
-        <section className="panel recipient-panel p-5">
+        <section
+          className="panel recipient-panel p-5"
+          ref={shortlistSection}
+          tabIndex={-1}
+          aria-label="Your shortlist"
+        >
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <p className="eyebrow">02 / Your shortlist</p>
             <p aria-live="polite" className="text-xs tabular-nums text-body">
@@ -251,7 +300,6 @@ export function Compose({
               Up to 15 eligible contacts in this filter
             </span>
           </div>
-          {removalResult?.ok === false && <Feedback result={removalResult} />}
           <div className="space-y-4">
             {!filteredContacts.length && (
               <p className="py-6 text-sm text-body">
@@ -309,46 +357,12 @@ export function Compose({
                                 : "Remove from shortlist"
                             }
                             disabled={busy || c.blocked}
-                            onClick={() => {
-                              setRemovingId(c.id);
+                            onClick={(event) => {
+                              removalTrigger.current = event.currentTarget;
+                              removalSucceeded.current = false;
+                              setRemovalContact(c);
                               setRemovalResult(undefined);
-                              startRemoval(async () => {
-                                try {
-                                  const response = await removeFromShortlist(
-                                    c.id,
-                                  );
-                                  setRemovalResult(response);
-                                  if (response.ok) {
-                                    setSelected((current) =>
-                                      current.filter(
-                                        (person) => person.id !== c.id,
-                                      ),
-                                    );
-                                    setResendIds((current) =>
-                                      current.filter((id) => id !== c.id),
-                                    );
-                                    setRecipientRoles((current) => {
-                                      const next = { ...current };
-                                      delete next[c.id];
-                                      return next;
-                                    });
-                                    setPreviewId((current) =>
-                                      current === c.id ? "" : current,
-                                    );
-                                    setResult(undefined);
-                                    setKey("");
-                                    router.refresh();
-                                  }
-                                } catch {
-                                  setRemovalResult({
-                                    ok: false,
-                                    message:
-                                      "Could not remove this person. Try again.",
-                                  });
-                                } finally {
-                                  setRemovingId("");
-                                }
-                              });
+                              removalDialog.current?.showModal();
                             }}
                           >
                             <X
@@ -677,6 +691,51 @@ export function Compose({
           </Button>
         </section>
       </aside>
+      <dialog
+        ref={removalDialog}
+        aria-labelledby="remove-shortlist-title"
+        aria-describedby="remove-shortlist-description"
+        onCancel={(event) => {
+          if (removalInFlight.current) event.preventDefault();
+        }}
+        onClose={() => {
+          if (removalSucceeded.current) shortlistSection.current?.focus();
+          else removalTrigger.current?.focus();
+        }}
+      >
+        <h2 id="remove-shortlist-title" className="text-xl font-semibold">
+          Remove {removalContact?.name} from shortlist?
+        </h2>
+        <p
+          id="remove-shortlist-description"
+          className="mt-3 text-sm leading-6 text-body"
+        >
+          This person will be removed from your shortlist. Their contact and
+          email history will be kept.
+        </p>
+        <div className="mt-6 flex justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            autoFocus
+            disabled={removing}
+            onClick={() => {
+              if (!removalInFlight.current) removalDialog.current?.close();
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={busy}
+            onClick={confirmRemoval}
+          >
+            {removing ? "Removing…" : "Remove"}
+          </Button>
+        </div>
+        {removalResult?.ok === false && <Feedback result={removalResult} />}
+      </dialog>
     </div>
   );
 }
