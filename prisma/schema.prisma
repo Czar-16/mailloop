@@ -53,6 +53,7 @@ model Contact {
   notes      String?
   tag        String?
   archivedAt DateTime?
+  followUpRequestedAt DateTime?
   createdAt  DateTime  @default(now())
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   sends      Send[]

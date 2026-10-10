@@ -987,8 +987,8 @@ test("template, contact import, preview, and individual campaign queue", async (
     "Contacts imported successfully.",
   );
   await page.goto("/compose");
-  await page.getByLabel("Role to Apply to Selected").fill("Engineer");
   await page.getByRole("checkbox", { name: /Alex/ }).check();
+  await page.locator("#compose-role").fill("Engineer");
   await expect(
     page.getByLabel("Choose a template", { exact: true }),
   ).toHaveValue("");
@@ -1093,7 +1093,7 @@ test("recipient cap, duplicate override, search persistence, and keyboard focus"
   await expect(page.getByText("15 / 15 selected")).toBeVisible();
   await page.getByRole("checkbox", { name: /Person 00/ }).uncheck();
   await expect(page.getByText("14 / 15 selected")).toBeVisible();
-  await page.getByLabel("Role to Apply to Selected").focus();
+  await page.locator("#compose-role").focus();
   await page.keyboard.press("Tab");
   expect(
     await page.evaluate(
@@ -1141,7 +1141,7 @@ test("setup, name suggestion manual override, account menu, and theme persistenc
 }) => {
   await page.goto("/contacts");
   await page
-    .getByRole("button", { name: "SDE Intern", exact: true })
+    .getByRole("button", { name: "Software Engineer Intern", exact: true })
     .first()
     .click();
   await page
@@ -1160,7 +1160,7 @@ test("setup, name suggestion manual override, account menu, and theme persistenc
   await page
     .locator("form")
     .filter({ has: page.getByRole("heading", { name: "New Contact" }) })
-    .getByRole("button", { name: "SDE Intern", exact: true })
+    .getByRole("button", { name: "Software Engineer Intern", exact: true })
     .click();
   await page.getByRole("button", { name: "Save Contact", exact: true }).click();
   await expect(
@@ -1172,7 +1172,7 @@ test("setup, name suggestion manual override, account menu, and theme persistenc
     'SELECT "preferredRoles" FROM "User" WHERE id=$1',
     [userId],
   );
-  expect(saved.rows[0].preferredRoles).toEqual(["SDE Intern"]);
+  expect(saved.rows[0].preferredRoles).toEqual(["Software Engineer Intern"]);
   await page.getByRole("button", { name: "Account menu", exact: true }).click();
   await expect(page.getByRole("menu")).toContainText(`${userId}@example.test`);
   await expect(
@@ -1968,9 +1968,9 @@ test("compose bulk selection respects role filters, prior sends and the batch ca
   await expect(
     page.getByText("15 / 15 selected", { exact: true }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("checkbox", { name: /Person 00/ }),
-  ).not.toBeChecked();
+  await expect(page.getByRole("checkbox", { name: /Person 00/ })).toHaveCount(
+    0,
+  );
   await expect(
     page.getByRole("checkbox", { name: /Person 01/ }),
   ).not.toBeChecked();
@@ -2067,9 +2067,6 @@ test("attachment defaults, example replacement warning, and batch role filters",
   await page.getByRole("checkbox", { name: /Alex/ }).check();
   await page
     .getByRole("button", { name: "Frontend Developer", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "Apply Role to Selected", exact: true })
     .click();
   await page
     .getByLabel("Filter by Job Role", { exact: true })
@@ -3354,6 +3351,10 @@ async function seedReadinessWorkspace(userId: string) {
       new Date(Date.now() - 48 * 3600000),
     ],
   );
+  await pool.query(
+    'UPDATE "Contact" SET "followUpRequestedAt"=now() WHERE id=$1 AND "userId"=$2',
+    [contacts.Previously, userId],
+  );
   // Exact quota: 50 queued + 3 recently sent + 1 replied + 2 uncertain/in-flight.
   for (let index = 0; index < 57; index++) {
     const status =
@@ -3542,15 +3543,11 @@ for (const theme of ["light", "dark"] as const) {
     await expect(rows.nth(1)).toHaveAttribute("data-done", "true");
     await expect(rows.nth(1)).toContainText("2 selected");
     await expect(rows.nth(2)).toContainText(
-      "Alex, Sam need a role. Use Apply Role to Selected.",
+      "Alex, Sam need a role. Edit each recipient’s role.",
     );
     await expect(send).toBeDisabled();
-    await page
-      .getByLabel("Role to Apply to Selected", { exact: true })
-      .fill("Engineer");
-    await page
-      .getByRole("button", { name: "Apply Role to Selected", exact: true })
-      .click();
+    await page.getByLabel("Role for Alex", { exact: true }).fill("Engineer");
+    await page.getByLabel("Job Role for Sam", { exact: true }).fill("Engineer");
     await expect(rows.nth(2)).toHaveAttribute("data-done", "true");
     await expect(rows.nth(2).locator(".send-checklist-hint")).toHaveCSS(
       "max-height",
@@ -3577,7 +3574,7 @@ for (const theme of ["light", "dark"] as const) {
     await page.getByLabel("Job Role for Alex", { exact: true }).fill("   ");
     await expect(rows.nth(2)).toHaveAttribute("data-done", "false");
     await expect(rows.nth(2)).toContainText(
-      "Alex needs a role. Use Apply Role to Selected.",
+      "Alex needs a role. Edit each recipient’s role.",
     );
     await expect(send).toBeDisabled();
     await page
@@ -3813,4 +3810,301 @@ test("checklist animations draw, reverse, stagger and pulse once on readiness", 
     "none",
   );
   await expect(glow).toHaveCSS("animation-name", "none");
+});
+
+test("contact recovery clears stale errors and preserves manual names", async ({
+  page,
+  userId,
+}) => {
+  await pool.query('UPDATE "User" SET "preferredRoles"=$2 WHERE id=$1', [
+    userId,
+    ["Engineer"],
+  ]);
+  await page.goto("/contacts");
+  const form = page
+    .locator("form")
+    .filter({ has: page.getByRole("heading", { name: "New Contact" }) });
+  await form.evaluate((element) => element.setAttribute("novalidate", ""));
+  await page.getByLabel("Email", { exact: true }).fill("invalid");
+  await page.getByLabel("Job Role", { exact: true }).fill("   ");
+  await form.getByRole("button", { name: "Save Contact", exact: true }).click();
+  await expect(page.getByLabel("Email", { exact: true })).toHaveAttribute(
+    "aria-invalid",
+    "true",
+  );
+  await page
+    .getByLabel("Email", { exact: true })
+    .fill("alex.smith@example.test");
+  await expect(page.getByLabel("Email", { exact: true })).toHaveAttribute(
+    "aria-invalid",
+    "false",
+  );
+  await expect(page.getByLabel("Name", { exact: true })).toHaveValue("Alex");
+  await expect(page.getByLabel("Job Role", { exact: true })).toHaveAttribute(
+    "aria-invalid",
+    "true",
+  );
+  await page.getByLabel("Job Role", { exact: true }).fill("Engineer");
+  await expect(page.getByLabel("Job Role", { exact: true })).toHaveAttribute(
+    "aria-invalid",
+    "false",
+  );
+  await page.getByLabel("Email", { exact: true }).fill("sam@example.test");
+  await expect(page.getByLabel("Name", { exact: true })).toHaveValue("Sam");
+  await page.getByLabel("Name", { exact: true }).fill("Taylor");
+  await page.getByLabel("Email", { exact: true }).fill("jordan@example.test");
+  await expect(page.getByLabel("Name", { exact: true })).toHaveValue("Taylor");
+  await page.getByLabel("Name", { exact: true }).fill("");
+  await expect(page.getByLabel("Name", { exact: true })).toHaveValue("Jordan");
+  await form.getByRole("button", { name: "Save Contact", exact: true }).click();
+  await expect(page.getByTestId("success-toast")).toContainText(
+    "Contact saved successfully.",
+  );
+  const saved = await pool.query(
+    'SELECT name,email FROM "Contact" WHERE "userId"=$1',
+    [userId],
+  );
+  expect(saved.rows).toEqual([
+    { name: "Jordan", email: "jordan@example.test" },
+  ]);
+});
+
+test("shortlist follow-up persistence and isolated preview roles", async ({
+  page,
+  userId,
+}) => {
+  const templateId = randomUUID(),
+    campaignId = randomUUID(),
+    sentId = randomUUID();
+  const contactIds = Array.from({ length: 11 }, () => randomUUID());
+  await pool.query('UPDATE "User" SET "preferredRoles"=$2 WHERE id=$1', [
+    userId,
+    ["Frontend Developer"],
+  ]);
+  await pool.query(
+    'INSERT INTO "Template" (id,"userId",name,subject,body) VALUES ($1,$2,$3,$4,$5)',
+    [
+      templateId,
+      userId,
+      "Role template",
+      "Hello {{name}}",
+      "Apply for {{role}} at {{company}}",
+    ],
+  );
+  for (const [index, id] of contactIds.entries()) {
+    await pool.query(
+      'INSERT INTO "Contact" (id,"userId",name,email,company,"jobRole") VALUES ($1,$2,$3,$4,$5,$6)',
+      [
+        id,
+        userId,
+        `Person ${index}`,
+        `person${index}@example.test`,
+        "Company with a long readable name",
+        `Original ${index}`,
+      ],
+    );
+  }
+  await pool.query(
+    'INSERT INTO "Campaign" (id,"userId","templateId",status) VALUES ($1,$2,$3,$4)',
+    [campaignId, userId, templateId, "COMPLETED"],
+  );
+  await pool.query(
+    'INSERT INTO "Send" (id,"campaignId","contactId",status,"deliveryState","sentAt","recipientName","recipientCompany","recipientRole") VALUES ($1,$2,$3,$4,$5,now(),$6,$7,$8)',
+    [
+      sentId,
+      campaignId,
+      contactIds[10],
+      "SENT",
+      "DONE",
+      "Person 10",
+      "Snapshot company",
+      "Snapshot role",
+    ],
+  );
+  await page.goto("/compose");
+  await expect(page.getByRole("checkbox", { name: /^Person 10/ })).toHaveCount(
+    0,
+  );
+  await expect(page.locator("#compose-role")).toBeDisabled();
+  await page
+    .getByLabel("Choose a template", { exact: true })
+    .selectOption(templateId);
+  await page.getByRole("button", { name: "Select all", exact: true }).click();
+  await expect(page.getByText("10 / 15 selected")).toBeVisible();
+  await page
+    .getByLabel("Preview recipient", { exact: true })
+    .selectOption(contactIds[0]);
+  await page
+    .getByRole("button", { name: "Frontend Developer", exact: true })
+    .click();
+  await expect(page.locator(".mail-preview")).toContainText(
+    "Apply for Frontend Developer",
+  );
+  for (let i = 1; i < 10; i++) {
+    await page
+      .getByLabel("Preview recipient", { exact: true })
+      .selectOption(contactIds[i]);
+    await expect(page.locator("#compose-role")).toHaveValue(`Original ${i}`);
+    await expect(page.locator(".mail-preview")).toContainText(
+      `Apply for Original ${i}`,
+    );
+    await expect(
+      page.getByLabel(`Job Role for Person ${i}`, { exact: true }),
+    ).toHaveValue(`Original ${i}`);
+  }
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.goto("/history");
+  const row = page.getByRole("row").filter({ hasText: "Person 10" });
+  await expect(row).toContainText("Snapshot role");
+  await row
+    .getByRole("button", { name: "Add to shortlist", exact: true })
+    .click();
+  await expect(
+    row.getByRole("button", { name: "In shortlist", exact: true }),
+  ).toBeDisabled();
+  await page.reload();
+  await expect(
+    row.getByRole("button", { name: "In shortlist", exact: true }),
+  ).toBeDisabled();
+  await pool.query(
+    'UPDATE "Contact" SET "jobRole"=$2 WHERE id=$1 AND "userId"=$3',
+    [contactIds[10], "Edited role", userId],
+  );
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((theme) => {
+      localStorage.setItem("mailloop-theme", theme);
+    }, theme);
+    await page.reload();
+    await expect(row).toContainText("Snapshot role");
+    await expect(row.locator(".table-value")).toHaveCount(2);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBeLessThanOrEqual(page.viewportSize()!.width);
+  }
+  await page.goto("/compose");
+  await expect(
+    page.getByRole("checkbox", { name: /^Person 10/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Follow-up · allow a resend to include"),
+  ).toBeVisible();
+  await page
+    .getByLabel("Choose a template", { exact: true })
+    .selectOption(templateId);
+  await page.getByRole("checkbox", { name: /^Person 10/ }).check();
+  await expect(page.locator(".compose-send-button")).toBeDisabled();
+  await page
+    .getByRole("checkbox", { name: "Allow a resend to Person 10", exact: true })
+    .check();
+  await expect(page.locator(".compose-send-button")).toBeEnabled();
+  await page.getByRole("checkbox", { name: /^Person 10/ }).uncheck();
+  await pool.query(
+    'INSERT INTO "Send" (id,"campaignId","contactId",status,"deliveryState") VALUES ($1,$2,$3,$4,$5)',
+    [randomUUID(), campaignId, contactIds[10], "FAILED", "UNCERTAIN"],
+  );
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Pending delivery", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("checkbox", { name: /^Person 10/ }),
+  ).toBeDisabled();
+  await pool.query(
+    'UPDATE "Send" SET status=$2,"deliveryState"=$3,"sentAt"=now() WHERE "campaignId"=$1 AND status=$4',
+    [campaignId, "SENT", "DONE", "FAILED"],
+  );
+  await page.reload();
+  await expect(page.getByRole("checkbox", { name: /^Person 10/ })).toHaveCount(
+    0,
+  );
+});
+
+test("contacts table expands, restores focus, and returns to editing", async ({
+  page,
+  userId,
+}) => {
+  const contactId = randomUUID();
+  await pool.query('UPDATE "User" SET "preferredRoles"=$2 WHERE id=$1', [
+    userId,
+    ["Engineer"],
+  ]);
+  await pool.query(
+    'INSERT INTO "Contact" (id,"userId",name,email,company,"jobRole") VALUES ($1,$2,$3,$4,$5,$6)',
+    [
+      contactId,
+      userId,
+      "Expanded Person",
+      "expanded@example.test",
+      "Northstar Technologies",
+      "Software Engineer Intern",
+    ],
+  );
+  await page.goto("/contacts");
+  const expand = page.getByRole("button", {
+    name: "Expand contacts table",
+    exact: true,
+  });
+  await expect(
+    page
+      .getByRole("columnheader", { name: /Actions/ })
+      .getByRole("button", { name: "Expand contacts table", exact: true }),
+  ).toHaveCount(1);
+  const panelBounds = (await page
+    .getByRole("table", { name: "Your contacts" })
+    .locator("..")
+    .boundingBox())!;
+  const iconBounds = (await expand.boundingBox())!;
+  expect(iconBounds.x).toBeGreaterThanOrEqual(panelBounds.x);
+  expect(iconBounds.x + iconBounds.width).toBeLessThanOrEqual(
+    panelBounds.x + panelBounds.width - 8,
+  );
+  if (test.info().project.name === "desktop") await expand.hover();
+  else await expand.focus();
+  await expect(
+    page.getByRole("tooltip", { name: "Expand table", exact: true }),
+  ).toBeVisible();
+  const dialog = page.getByRole("dialog", {
+    name: "Expanded contacts table",
+    exact: true,
+  });
+  for (const theme of ["Light theme", "Dark theme"]) {
+    await page.getByRole("button", { name: theme, exact: true }).click();
+    await expand.click();
+    await expect(dialog).toBeVisible();
+    await expect(
+      dialog.getByRole("table", { name: "Your contacts" }),
+    ).toHaveCount(1);
+    await expect(dialog).toContainText("Northstar Technologies");
+    const bounds = (await dialog.boundingBox())!;
+    expect(bounds.width).toBeGreaterThan(page.viewportSize()!.width - 40);
+    expect(bounds.height).toBeGreaterThan(page.viewportSize()!.height - 40);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBeLessThanOrEqual(page.viewportSize()!.width);
+    expect(await page.evaluate(() => document.body.style.overflow)).toBe(
+      "hidden",
+    );
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    await page.keyboard.press("Escape");
+    await expect(dialog).not.toBeVisible();
+    await expect(expand).toBeFocused();
+    expect(await page.evaluate(() => document.body.style.overflow)).not.toBe(
+      "hidden",
+    );
+  }
+  await expand.click();
+  await dialog
+    .getByRole("button", { name: "Collapse contacts table", exact: true })
+    .click();
+  await expect(dialog).not.toBeVisible();
+  await expect(page.getByRole("table", { name: "Your contacts" })).toHaveCount(
+    1,
+  );
+  await expand.click();
+  await dialog.getByRole("link", { name: "Edit", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`edit=${contactId}`));
+  await expect(dialog).not.toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Edit Contact", exact: true }),
+  ).toBeVisible();
 });

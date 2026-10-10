@@ -37,12 +37,12 @@ export const tutorials: Record<string, readonly TutorialStep[]> = {
     },
     {
       title: "Apply a role",
-      text: "Enter a role in Role to Apply to Selected, or choose a saved role chip, then click Apply Role to Selected. This changes the selected recipients’ roles for this batch.",
+      text: "Select a recipient in Personal preview, then edit Role for that person or choose a saved role shortcut. Only that recipient’s role changes, for this batch.",
       hint: "roles",
     },
     {
       title: "Build your shortlist",
-      text: "Use Filter by Job Role and Select all to choose up to 15 eligible contacts. Previously contacted people are skipped unless you allow a resend; queued or unconfirmed sends stay blocked.",
+      text: "Use Filter by Job Role and Select all to choose up to 15 eligible contacts. Unsent contacts appear automatically. Add follow-ups from History and allow a resend; pending deliveries stay in a disabled group.",
       hint: "shortlist",
     },
     {
@@ -91,7 +91,7 @@ export const tutorials: Record<string, readonly TutorialStep[]> = {
     },
     {
       title: "Find a message",
-      text: "Search recipients or companies and filter by Queued, Sent, Failed, or Replied. Each row shows the recipient, company, template, sent time, and status.",
+      text: "Search recipients or companies and filter by Queued, Sent, Failed, or Replied. Each row shows the recipient, company, saved job role, template, sent time, and status. Add successful Sent or Replied deliveries back to your shortlist for an intentional follow-up.",
       hint: "statuses",
     },
     {

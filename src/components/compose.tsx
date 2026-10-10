@@ -23,6 +23,7 @@ export type ComposeContact = {
   lastSent: string | null;
   previouslySent: boolean;
   blocked: boolean;
+  followUp?: boolean;
 };
 export function Compose({
   templates,
@@ -42,7 +43,6 @@ export function Compose({
   const displayedQuota = useWorkspaceQuota(used);
   const [templateId, setTemplateId] = useState("");
   const [selected, setSelected] = useState<ComposeContact[]>([]);
-  const [role, setRole] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
   const [recipientRoles, setRecipientRoles] = useState<Record<string, string>>(
     {},
@@ -85,6 +85,11 @@ export function Compose({
     (bulkEligible.every((c) => selectedIds.has(c.id)) ||
       (selected.length >= 15 && hasFilteredSelection));
   useUnsavedChanges(selected.length > 0 && !result?.ok, true);
+  function updateRole(id: string, value: string) {
+    setRecipientRoles((current) => ({ ...current, [id]: value }));
+    setResult(undefined);
+    setKey("");
+  }
   function toggle(contact: ComposeContact) {
     setResult(undefined);
     if (selected.some((c) => c.id === contact.id)) {
@@ -137,20 +142,20 @@ export function Compose({
               htmlFor="compose-role"
               className="mb-2 block text-sm font-medium"
             >
-              Role to Apply to Selected
+              Role for {preview?.name ?? "current recipient"}
             </label>
             <Input
               id="compose-role"
               ref={roleInput}
-              disabled={pending}
+              disabled={pending || !preview}
               aria-invalid={!!result?.fieldErrors?.role}
               aria-describedby={
                 result?.fieldErrors?.role ? "compose-role-error" : undefined
               }
               name="role"
-              value={role}
+              value={preview ? getRole(preview) : ""}
               onChange={(e) => {
-                setRole(e.target.value);
+                if (preview) updateRole(preview.id, e.target.value);
                 setResult(undefined);
                 setKey("");
               }}
@@ -173,29 +178,11 @@ export function Compose({
             </p>
             <RoleChoices
               roles={roles}
-              disabled={pending}
-              onChoose={(r) => setRole(r)}
-            />
-            <Button
-              className="mt-3"
-              variant="outline"
-              disabled={pending}
-              onClick={() => {
-                if (!role.trim()) {
-                  setResult({ ok: false, message: "Enter a role to apply." });
-                  return;
-                }
-                setRecipientRoles({
-                  ...recipientRoles,
-                  ...Object.fromEntries(
-                    selected.map((c) => [c.id, role.trim()]),
-                  ),
-                });
-                setKey("");
+              disabled={pending || !preview}
+              onChoose={(r) => {
+                if (preview) updateRole(preview.id, r);
               }}
-            >
-              Apply Role to Selected
-            </Button>
+            />
           </div>
         </section>
         <section className="panel recipient-panel p-5">
@@ -206,8 +193,8 @@ export function Compose({
             </p>
           </div>
           <p className="mb-4 text-xs leading-5 text-body">
-            Previously contacted people are skipped unless you allow a resend.
-            Queued or unconfirmed sends are blocked.
+            Unsent contacts appear here. Add intentional follow-ups from
+            History, then allow a resend. Pending deliveries remain blocked.
           </p>
           <label className="mb-4 block text-sm">
             Filter by Job Role
@@ -269,65 +256,74 @@ export function Compose({
                 or change your search.
               </p>
             )}
-            {filteredContacts.map((c) => {
-              const checked = selected.some((s) => s.id === c.id);
-              return (
-                <div key={c.id} className="recipient-card">
-                  <label
-                    className={`recipient-header flex min-h-11 items-center gap-3 ${c.blocked ? "opacity-60" : "cursor-pointer"}`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggle(c)}
-                      disabled={
-                        pending ||
-                        c.blocked ||
-                        (!checked && selected.length >= 15)
-                      }
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block break-words text-[17px] font-semibold">
-                        {c.name}{" "}
-                        {c.company?.trim() && (
-                          <span className="recipient-company font-normal">
-                            · {c.company}
+            {[false, true].map((blocked) => (
+              <div key={String(blocked)} className="space-y-4">
+                {blocked && filteredContacts.some((c) => c.blocked) && (
+                  <h3 className="text-sm font-semibold">Pending delivery</h3>
+                )}
+                {filteredContacts
+                  .filter((c) => c.blocked === blocked)
+                  .map((c) => {
+                    const checked = selected.some((s) => s.id === c.id);
+                    return (
+                      <div key={c.id} className="recipient-card">
+                        <label
+                          className={`recipient-header flex min-h-11 items-center gap-3 ${c.blocked ? "opacity-60" : "cursor-pointer"}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggle(c)}
+                            disabled={
+                              pending ||
+                              c.blocked ||
+                              (!checked && selected.length >= 15)
+                            }
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block break-words text-[17px] font-semibold">
+                              {c.name}{" "}
+                              {c.company?.trim() && (
+                                <span className="recipient-company font-normal">
+                                  · {c.company}
+                                </span>
+                              )}
+                            </span>
                           </span>
+                        </label>
+                        <dl className="recipient-details">
+                          <dt>Email</dt>
+                          <dd>{c.email}</dd>
+                          {getRole(c).trim() && (
+                            <>
+                              <dt>Role</dt>
+                              <dd>{getRole(c)}</dd>
+                            </>
+                          )}
+                          {c.lastSent && (
+                            <>
+                              <dt>Last sent</dt>
+                              <dd>
+                                <DateTime value={c.lastSent} />
+                              </dd>
+                            </>
+                          )}
+                        </dl>
+                        {c.blocked && (
+                          <p className="recipient-blocked text-xs">
+                            Already queued or awaiting delivery confirmation
+                          </p>
                         )}
-                      </span>
-                    </span>
-                  </label>
-                  <dl className="recipient-details">
-                    <dt>Email</dt>
-                    <dd>{c.email}</dd>
-                    {getRole(c).trim() && (
-                      <>
-                        <dt>Role</dt>
-                        <dd>{getRole(c)}</dd>
-                      </>
-                    )}
-                    {c.lastSent && (
-                      <>
-                        <dt>Last sent</dt>
-                        <dd>
-                          <DateTime value={c.lastSent} />
-                        </dd>
-                      </>
-                    )}
-                  </dl>
-                  {c.blocked && (
-                    <p className="recipient-blocked text-xs">
-                      Already queued or awaiting delivery confirmation
-                    </p>
-                  )}
-                  {c.previouslySent && !c.blocked && (
-                    <p className="status-pill recipient-warning">
-                      Previously contacted · skipped by default
-                    </p>
-                  )}
-                </div>
-              );
-            })}
+                        {c.previouslySent && !c.blocked && (
+                          <p className="status-pill recipient-warning">
+                            Follow-up · allow a resend to include
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            ))}
           </div>
           {selected.some((c) => !contacts.some((v) => v.id === c.id)) && (
             <p className="mt-4 text-xs text-body">
@@ -351,11 +347,7 @@ export function Compose({
                   autoComplete="off"
                   disabled={pending}
                   onChange={(e) => {
-                    setRecipientRoles({
-                      ...recipientRoles,
-                      [c.id]: e.target.value,
-                    });
-                    setKey("");
+                    updateRole(c.id, e.target.value);
                   }}
                   required
                 />
@@ -617,6 +609,7 @@ export function Compose({
                 });
                 setResult(r);
                 if (r.ok) {
+                  setRecipientRoles({});
                   setSelected([]);
                   setResendIds([]);
                   setKey("");

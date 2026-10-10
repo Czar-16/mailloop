@@ -26,7 +26,7 @@ function Chips() {
   return (
     <div className="tutorial-mini-chips">
       <span>Frontend Developer</span>
-      <span>SDE Intern</span>
+      <span>Software Engineer Intern</span>
     </div>
   );
 }
@@ -78,10 +78,12 @@ export function TutorialHint({
     case "roles":
       visual = (
         <>
-          <small>Role to Apply to Selected</small>
+          <small>Role for Alex</small>
           <Field>Frontend Developer</Field>
           <Chips />
-          <span className="tutorial-mini-primary">Apply Role to Selected</span>
+          <span className="tutorial-mini-primary">
+            Preview updates for Alex
+          </span>
         </>
       );
       break;
@@ -92,7 +94,9 @@ export function TutorialHint({
           <Field dropdown>All Roles</Field>
           <span className="tutorial-mini-link">Select all</span>
           <ContactRow selectable />
-          <span className="tutorial-mini-warning">Previously contacted</span>
+          <span className="tutorial-mini-warning">
+            Follow-up · allow a resend
+          </span>
         </>
       );
       break;

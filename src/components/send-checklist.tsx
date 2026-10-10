@@ -102,7 +102,7 @@ export function SendChecklist({
       label: "Every recipient has a role",
       done: recipientCount > 0 && !missingRoles.length,
       hint: missingRoles.length
-        ? `${missingRoles.join(", ")} ${missingRoles.length === 1 ? "needs" : "need"} a role. Use Apply Role to Selected.`
+        ? `${missingRoles.join(", ")} ${missingRoles.length === 1 ? "needs" : "need"} a role. Edit each recipient’s role.`
         : "",
     },
     { label: "Resume attached (optional)", done: attachResume, hint: "" },

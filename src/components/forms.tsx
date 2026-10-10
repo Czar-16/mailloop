@@ -413,12 +413,23 @@ export function ContactForm({
   const router = useRouter();
   const notifySuccess = useSuccessNotification();
   const formRef = useRef<HTMLFormElement>(null);
+  const focusSubmissionErrors = useRef(false);
   useEffect(() => {
-    if (!pending && result?.ok === false)
+    if (!pending && result?.ok === false && focusSubmissionErrors.current) {
+      focusSubmissionErrors.current = false;
       formRef.current
         ?.querySelector<HTMLElement>("[aria-invalid='true']")
         ?.focus();
+    }
   }, [result, pending]);
+  function clearFieldError(field: string) {
+    setResult((current) => {
+      if (!current) return current;
+      const fieldErrors = { ...current.fieldErrors };
+      delete fieldErrors[field];
+      return { ok: false, message: "", fieldErrors };
+    });
+  }
   return (
     <form
       ref={formRef}
@@ -433,6 +444,7 @@ export function ContactForm({
         setResult(undefined);
         start(async () => {
           const r = await saveContact(form);
+          focusSubmissionErrors.current = !r.ok;
           setResult(r);
           if (r.ok) {
             notifySuccess("Contact saved successfully.");
@@ -470,7 +482,7 @@ export function ContactForm({
           {
             name: "jobRole",
             label: "Job Role",
-            placeholder: "SDE Intern…",
+            placeholder: "Software Engineer Intern…",
             max: 160,
           },
         ] as const
@@ -507,12 +519,22 @@ export function ContactForm({
                   : undefined
             }
             onChange={(e) => {
+              clearFieldError(f.name);
               if (f.name === "name") {
-                manualName.current = true;
-                setName(e.target.value);
+                manualName.current = !!e.target.value.trim();
+                setName(
+                  e.target.value ||
+                    suggestName(
+                      formRef.current?.querySelector<HTMLInputElement>(
+                        '[name="email"]',
+                      )?.value ?? "",
+                    ),
+                );
               }
-              if (f.name === "email" && !manualName.current)
+              if (f.name === "email" && !manualName.current) {
                 setName(suggestName(e.target.value));
+                clearFieldError("name");
+              }
               if (f.name === "jobRole") setJobRole(e.target.value);
             }}
             required={f.name !== "company"}
@@ -534,7 +556,7 @@ export function ContactForm({
         onChoose={(r) => {
           setJobRole(r);
           setDirty(true);
-          setResult((current) => (current?.ok ? undefined : current));
+          clearFieldError("jobRole");
         }}
       />
       <Feedback result={result} successConfirmation />

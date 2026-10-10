@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Feedback, useUnsavedChanges } from "@/components/forms";
 import type { ActionResult } from "@/lib/errors";
 export const commonRoles = [
-  "SDE Intern",
+  "Software Engineer Intern",
   "Frontend Developer",
   "Backend Developer",
   "Full Stack Developer",

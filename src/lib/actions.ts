@@ -2,6 +2,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireUser } from "@/lib/session";
+import { Prisma } from "@/generated/prisma/client";
+import { contactDeliveryState } from "@/lib/shortlist";
 import { db } from "@/lib/db";
 import {
   contactSchema,
@@ -208,5 +210,44 @@ export async function savePreferences(input: unknown) {
     });
     revalidatePath("/", "layout");
     return { ok: true, message: "Preferences saved." };
+  });
+}
+
+export async function addToShortlist(sendId: string): Promise<ActionResult> {
+  const user = await requireUser();
+  return result(async () => {
+    const id = z.uuid().parse(sendId);
+    await db.$transaction(async (tx) => {
+      // Use the same user lock as campaign creation to serialize repeat additions and queueing.
+      await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${user.id} FOR UPDATE`;
+      const send = await tx.send.findFirst({
+        where: {
+          id,
+          campaign: { userId: user.id },
+          status: { in: ["SENT", "REPLIED"] },
+        },
+        select: { contactId: true },
+      });
+      if (!send) throw new AppError("Successful delivery not found.");
+      const [contact] = await tx.$queryRaw<
+        { id: string; blocked: boolean; followUp: boolean }[]
+      >(Prisma.sql`
+        SELECT c.id, state.blocked, state."followUp" FROM "Contact" c
+        CROSS JOIN LATERAL (${contactDeliveryState}) state
+        WHERE c.id = ${send.contactId} AND c."userId" = ${user.id} AND c."archivedAt" IS NULL`);
+      if (!contact) throw new AppError("Contact is unavailable.");
+      if (contact.blocked)
+        throw new AppError(
+          "Wait for pending delivery to resolve before adding a follow-up.",
+        );
+      if (!contact.followUp)
+        await tx.contact.updateMany({
+          where: { id: contact.id, userId: user.id, archivedAt: null },
+          data: { followUpRequestedAt: new Date() },
+        });
+    });
+    revalidatePath("/compose");
+    revalidatePath("/history");
+    return { ok: true, message: "In shortlist" };
   });
 }

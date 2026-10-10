@@ -1,3 +1,7 @@
+import { Prisma } from "@/generated/prisma/client";
+import { contactDeliveryState } from "@/lib/shortlist";
+import { AddToShortlist } from "@/components/add-to-shortlist";
+import { TableValue } from "@/components/table-value";
 import { Suspense } from "react";
 import { WorkspaceSkeleton } from "@/components/workspace-skeleton";
 import { readCampaignProgress } from "@/lib/campaign-progress";
@@ -59,6 +63,8 @@ async function HistoryContent({
           recipientName: true,
           recipientEmail: true,
           recipientCompany: true,
+          recipientRole: true,
+          contactId: true,
           templateName: true,
           status: true,
           sentAt: true,
@@ -81,6 +87,22 @@ async function HistoryContent({
         where: { campaign: { userId: user.id }, status: "QUEUED" },
       }),
     ]);
+  const contactIds = [...new Set(sends.map((s) => s.contactId))];
+  const contactStates = contactIds.length
+    ? await db.$queryRaw<
+        {
+          id: string;
+          archivedAt: Date | null;
+          blocked: boolean;
+          followUp: boolean;
+        }[]
+      >(Prisma.sql`
+    SELECT c.id, c."archivedAt", state.blocked, state."followUp"
+    FROM "Contact" c CROSS JOIN LATERAL (${contactDeliveryState}) state
+    WHERE c."userId" = ${user.id} AND c.id IN (${Prisma.join(contactIds)})
+  `)
+    : [];
+  const states = new Map(contactStates.map((c) => [c.id, c]));
   // Initial visits show only the live queue; completion belongs to client visit state.
   const progress = await readCampaignProgress(user);
   return (
@@ -147,9 +169,11 @@ async function HistoryContent({
               <tr>
                 <th>Recipient</th>
                 <th>Company</th>
+                <th>Job Role</th>
                 <th>Template</th>
                 <th>Sent</th>
                 <th>Status</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -163,8 +187,11 @@ async function HistoryContent({
                       {s.recipientEmail}
                     </p>
                   </td>
-                  <td className="max-w-40 break-words text-body">
-                    {s.recipientCompany || "—"}
+                  <td className="text-body">
+                    <TableValue value={s.recipientCompany} singleLine />
+                  </td>
+                  <td className="whitespace-nowrap">
+                    <TableValue value={s.recipientRole} singleLine />
                   </td>
                   <td className="max-w-40 break-words text-body">
                     {s.templateName}
@@ -189,6 +216,19 @@ async function HistoryContent({
                       <p className="mt-2 text-xs text-body">
                         Waiting for delivery service
                       </p>
+                    )}
+                  </td>
+                  <td>
+                    {["SENT", "REPLIED"].includes(s.status) && (
+                      <AddToShortlist
+                        sendId={s.id}
+                        inShortlist={states.get(s.contactId)?.followUp ?? false}
+                        blocked={states.get(s.contactId)?.blocked ?? false}
+                        active={
+                          !!states.get(s.contactId) &&
+                          !states.get(s.contactId)?.archivedAt
+                        }
+                      />
                     )}
                   </td>
                 </tr>

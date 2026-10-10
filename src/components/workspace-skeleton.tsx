@@ -56,13 +56,19 @@ export function ShortlistSkeleton({ rows = 3 }: { rows?: number }) {
   );
 }
 
-export function TableSkeleton({ rows = 5 }: { rows?: number }) {
+export function TableSkeleton({
+  rows = 5,
+  columns = 5,
+}: {
+  rows?: number;
+  columns?: number;
+}) {
   return (
     <div className="panel overflow-x-auto" aria-hidden="true">
       <table className="w-full text-sm">
         <thead>
           <tr>
-            {Array.from({ length: 5 }, (_, index) => (
+            {Array.from({ length: columns }, (_, index) => (
               <th key={index}>
                 <Skeleton className="h-3 w-20" />
               </th>
@@ -72,7 +78,7 @@ export function TableSkeleton({ rows = 5 }: { rows?: number }) {
         <tbody>
           {Array.from({ length: rows }, (_, row) => (
             <tr key={row}>
-              {Array.from({ length: 5 }, (_, column) => (
+              {Array.from({ length: columns }, (_, column) => (
                 <td key={column}>
                   <Skeleton
                     className={
@@ -137,7 +143,6 @@ export function PageContentSkeleton({
                 <Skeleton className="h-11 w-28 rounded-full" />
                 <Skeleton className="h-11 w-40 rounded-full" />
               </div>
-              <Skeleton className="h-11 w-48 max-w-full" />
             </CardSkeleton>
             <CardSkeleton>
               <Skeleton className="h-10 w-full" />
@@ -217,7 +222,7 @@ export function PageContentSkeleton({
           </CardSkeleton>
         )}
         <SearchSkeleton label={false} />
-        <TableSkeleton />
+        <TableSkeleton columns={7} />
         <Skeleton className="mt-6 h-4 w-40" />
       </>
     );

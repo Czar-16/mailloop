@@ -1,3 +1,8 @@
+import {
+  ExpandableContactsTable,
+  ContactsTableExpandButton,
+} from "@/components/expandable-contacts-table";
+import { TableValue } from "@/components/table-value";
 import { Suspense } from "react";
 import { WorkspaceSkeleton } from "@/components/workspace-skeleton";
 import { DateTime } from "@/components/date-time";
@@ -89,73 +94,84 @@ async function ContactsContent({
               Search
             </Button>
           </form>
-          {!contacts.length ? (
-            <EmptyState
-              title={q ? "No contacts found" : "Meet your shortlist"}
-              description={
-                q
-                  ? "Try another name, email, or company."
-                  : "Add your first contact, or import a list below."
-              }
-            />
-          ) : (
-            <div className="panel overflow-x-auto">
-              <table className="w-full text-sm">
-                <caption className="sr-only">Your contacts</caption>
-                <thead>
-                  <tr>
-                    <th>Person</th>
-                    <th>Company</th>
-                    <th>Job Role</th>
-                    <th>Last Sent</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {contacts.map((c) => (
-                    <tr key={c.id}>
-                      <td>
-                        <p className="max-w-64 break-words font-medium">
-                          {c.name}
-                        </p>
-                        <p className="mt-1 max-w-64 break-all text-xs text-body">
-                          {c.email}
-                        </p>
-                      </td>
-                      <td className="max-w-40 break-words text-body">
-                        {c.company || "—"}
-                      </td>
-                      <td className="max-w-40 break-words text-body">
-                        {c.jobRole || "Choose a job role"}
-                      </td>
-                      <td className="whitespace-nowrap text-xs text-body">
-                        <DateTime
-                          value={c.sends[0]?.sentAt?.toISOString() ?? null}
-                        />
-                      </td>
-                      <td>
-                        <div className="flex">
-                          <Link
-                            href={`/contacts?edit=${c.id}`}
-                            className="inline-flex min-h-11 items-center px-3 text-link"
-                          >
-                            Edit
-                          </Link>
-                          <DeleteButton id={c.id} kind="contact" />
+          <ExpandableContactsTable>
+            {!contacts.length ? (
+              <EmptyState
+                title={q ? "No contacts found" : "Meet your shortlist"}
+                description={
+                  q
+                    ? "Try another name, email, or company."
+                    : "Add your first contact, or import a list below."
+                }
+              />
+            ) : (
+              <div className="panel overflow-x-auto">
+                <table className="w-full text-sm">
+                  <caption className="sr-only">Your contacts</caption>
+                  <thead>
+                    <tr>
+                      <th>Person</th>
+                      <th>Company</th>
+                      <th>Job Role</th>
+                      <th>Last Sent</th>
+                      <th className="sticky right-0 z-10 bg-card">
+                        <div className="flex items-center gap-1">
+                          <span>Actions</span>
+                          <ContactsTableExpandButton />
                         </div>
-                      </td>
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          <Pagination
-            path="/contacts"
-            page={page}
-            total={total}
-            query={{ q }}
-          />
+                  </thead>
+                  <tbody>
+                    {contacts.map((c) => (
+                      <tr key={c.id}>
+                        <td>
+                          <p className="max-w-64 break-words font-medium">
+                            {c.name}
+                          </p>
+                          <p className="mt-1 max-w-64 break-all text-xs text-body">
+                            {c.email}
+                          </p>
+                        </td>
+                        <td className="text-body">
+                          <TableValue value={c.company} singleLine />
+                        </td>
+                        <td className="whitespace-nowrap text-body">
+                          <TableValue
+                            value={c.jobRole}
+                            missing="Choose a job role"
+                            singleLine
+                          />
+                        </td>
+                        <td className="whitespace-nowrap text-xs text-body">
+                          <DateTime
+                            value={c.sends[0]?.sentAt?.toISOString() ?? null}
+                          />
+                        </td>
+                        <td className="sticky right-0 bg-card">
+                          <div className="flex">
+                            <Link
+                              href={`/contacts?edit=${c.id}`}
+                              className="inline-flex min-h-11 items-center px-3 text-link"
+                            >
+                              Edit
+                            </Link>
+                            <DeleteButton id={c.id} kind="contact" />
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <Pagination
+              path="/contacts"
+              page={page}
+              total={total}
+              query={{ q }}
+            />
+          </ExpandableContactsTable>
           <div className="mt-8">
             <ContactImport
               roles={user.preferredRoles}

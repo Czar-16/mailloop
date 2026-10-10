@@ -29,9 +29,6 @@ async function AuthenticatedLayout({
           <div className="page-container flex flex-wrap items-center justify-between gap-3 pt-[18px]">
             <div className="workspace-header-brand">
               <Wordmark />
-              <p className="workspace-brand-tagline">
-                Personalized outreach, made easy.
-              </p>
             </div>
             <div className="workspace-header-controls">
               <GmailStatus
