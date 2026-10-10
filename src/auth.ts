@@ -36,36 +36,55 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     async jwt({ token, account, profile }) {
       if (account && profile?.sub && profile.email && profile.email_verified) {
-        const existing = await db.user.findFirst({
-          where: { googleId: profile.sub },
+        const email = profile.email.toLowerCase();
+        const user = await db.$transaction(async (tx) => {
+          const existing = await tx.user.findFirst({
+            where: { googleId: profile.sub },
+          });
+          if (existing) {
+            await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${existing.id} FOR UPDATE`;
+            const current = await tx.user.findUnique({
+              where: { id: existing.id },
+            });
+            if (!current || current.deletionRequestedAt)
+              throw new Error("Account deletion in progress.");
+          }
+          // Never silently link an unrelated existing account by email.
+          const emailOwner = await tx.user.findUnique({
+            where: { email: email },
+          });
+          if (emailOwner && emailOwner.id !== existing?.id)
+            throw new Error("Account requires administrator review.");
+          const scopes = new Set((account.scope ?? "").split(" "));
+          const gmailAuthorized =
+            scopes.has("https://www.googleapis.com/auth/gmail.send") &&
+            scopes.has("https://www.googleapis.com/auth/gmail.readonly");
+          const data = {
+            email: email,
+            name: profile.name ?? null,
+            gmailAuthorized,
+            ...(account.refresh_token
+              ? { encryptedRefreshToken: encryptToken(account.refresh_token) }
+              : {}),
+          };
+          return existing
+            ? await tx.user.update({ where: { id: existing.id }, data })
+            : await tx.user.create({
+                data: { ...data, googleId: profile.sub },
+              });
         });
-        // Never silently link an unrelated existing account by email.
-        const emailOwner = await db.user.findUnique({
-          where: { email: profile.email.toLowerCase() },
-        });
-        if (emailOwner && emailOwner.id !== existing?.id)
-          throw new Error("Account requires administrator review.");
-        const scopes = new Set((account.scope ?? "").split(" "));
-        const gmailAuthorized =
-          scopes.has("https://www.googleapis.com/auth/gmail.send") &&
-          scopes.has("https://www.googleapis.com/auth/gmail.readonly");
-        const data = {
-          email: profile.email.toLowerCase(),
-          name: profile.name ?? null,
-          gmailAuthorized,
-          ...(account.refresh_token
-            ? { encryptedRefreshToken: encryptToken(account.refresh_token) }
-            : {}),
-        };
-        const user = existing
-          ? await db.user.update({ where: { id: existing.id }, data })
-          : await db.user.create({ data: { ...data, googleId: profile.sub } });
         token.userId = user.id;
       }
       return token;
     },
     async session({ session, token }) {
-      if (token.userId) session.user.id = token.userId;
+      if (token.userId) {
+        const user = await db.user.findUnique({
+          where: { id: token.userId },
+          select: { deletionRequestedAt: true },
+        });
+        session.user.id = user && !user.deletionRequestedAt ? token.userId : "";
+      }
       return session;
     },
   },

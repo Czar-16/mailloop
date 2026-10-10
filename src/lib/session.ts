@@ -9,6 +9,8 @@ export async function requireUser() {
     where: { id: session.user.id },
     select: {
       id: true,
+      deletionRequestedAt: true,
+      followUpDays: true,
       email: true,
       name: true,
       preferredRoles: true,
@@ -18,6 +20,6 @@ export async function requireUser() {
       encryptedRefreshToken: true,
     },
   });
-  if (!user) redirect("/");
+  if (!user || user.deletionRequestedAt) redirect("/");
   return user;
 }

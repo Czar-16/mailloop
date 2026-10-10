@@ -126,6 +126,20 @@ export default async function Home({
                 <br className="hidden sm:block" /> Sends from your Gmail.
               </p>
             </div>
+            <p className="mt-3 text-xs leading-5 text-body">
+              By signing in, you agree to the{" "}
+              <Link href="/terms" className="inline-flex min-h-11 items-center">
+                Terms
+              </Link>{" "}
+              and acknowledge the{" "}
+              <Link
+                href="/privacy"
+                className="inline-flex min-h-11 items-center"
+              >
+                Privacy Policy
+              </Link>
+              .
+            </p>
           </div>
           <BatchProgressCard />
         </section>
@@ -181,6 +195,14 @@ export default async function Home({
             mailloop
           </span>
           <p>Personalized outreach, made easy.</p>
+          <nav aria-label="Legal" className="flex gap-5">
+            <Link href="/privacy" className="inline-flex min-h-11 items-center">
+              Privacy Policy
+            </Link>
+            <Link href="/terms" className="inline-flex min-h-11 items-center">
+              Terms of Service
+            </Link>
+          </nav>
         </div>
       </footer>
     </div>

@@ -59,7 +59,7 @@ export function HistoryFilters({
         onChange={(event) => event.currentTarget.form?.requestSubmit()}
       >
         <option value="">All Statuses</option>
-        {["QUEUED", "SENT", "FAILED", "REPLIED"].map((value) => (
+        {["QUEUED", "SENT", "FAILED", "REPLIED", "CANCELLED"].map((value) => (
           <option key={value} value={value}>
             {value.charAt(0) + value.slice(1).toLowerCase()}
           </option>

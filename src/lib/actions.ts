@@ -47,18 +47,32 @@ async function result(
     };
   }
 }
+async function mutation(
+  userId: string,
+  work: (tx: Prisma.TransactionClient) => Promise<ActionResult>,
+) {
+  return result(() =>
+    db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`;
+      const user = await tx.user.findUnique({ where: { id: userId } });
+      if (!user || user.deletionRequestedAt)
+        throw new AppError("Account unavailable.");
+      return work(tx);
+    }),
+  );
+}
 export async function saveTemplate(form: FormData) {
   const user = await requireUser();
-  return result(async () => {
+  return mutation(user.id, async (tx) => {
     const data = templateSchema.parse(Object.fromEntries(form));
     const id = form.get("id");
     if (id) {
-      const updated = await db.template.updateMany({
+      const updated = await tx.template.updateMany({
         where: { id: z.uuid().parse(id), userId: user.id, archivedAt: null },
         data,
       });
       if (!updated.count) throw new AppError("Template not found.");
-    } else await db.template.create({ data: { ...data, userId: user.id } });
+    } else await tx.template.create({ data: { ...data, userId: user.id } });
     revalidatePath("/templates");
     revalidatePath("/compose");
     return { ok: true, message: "Template saved." };
@@ -66,8 +80,8 @@ export async function saveTemplate(form: FormData) {
 }
 export async function archiveTemplate(id: string) {
   const user = await requireUser();
-  return result(async () => {
-    await db.template.updateMany({
+  return mutation(user.id, async (tx) => {
+    await tx.template.updateMany({
       where: { id: z.uuid().parse(id), userId: user.id },
       data: { archivedAt: new Date() },
     });
@@ -81,17 +95,17 @@ export async function archiveTemplate(id: string) {
 }
 export async function saveContact(form: FormData) {
   const user = await requireUser();
-  return result(async () => {
+  return mutation(user.id, async (tx) => {
     const data = contactSchema.parse(Object.fromEntries(form));
     const id = form.get("id");
     if (id) {
-      const updated = await db.contact.updateMany({
+      const updated = await tx.contact.updateMany({
         where: { id: z.uuid().parse(id), userId: user.id, archivedAt: null },
         data,
       });
       if (!updated.count) throw new AppError("Contact not found.");
     } else {
-      await db.contact.upsert({
+      await tx.contact.upsert({
         where: { userId_email: { userId: user.id, email: data.email } },
         update: { ...data, archivedAt: null },
         create: { ...data, userId: user.id },
@@ -104,8 +118,8 @@ export async function saveContact(form: FormData) {
 }
 export async function archiveContact(id: string) {
   const user = await requireUser();
-  return result(async () => {
-    await db.contact.updateMany({
+  return mutation(user.id, async (tx) => {
+    await tx.contact.updateMany({
       where: { id: z.uuid().parse(id), userId: user.id },
       data: { archivedAt: new Date() },
     });
@@ -119,8 +133,8 @@ export async function archiveContact(id: string) {
 }
 export async function importContacts(input: unknown) {
   const user = await requireUser();
-  return result(async () => {
-    const existing = await db.contact.findMany({
+  return mutation(user.id, async (tx) => {
+    const existing = await tx.contact.findMany({
       where: { userId: user.id },
       select: { email: true },
     });
@@ -154,7 +168,7 @@ export async function importContacts(input: unknown) {
         company: r.company,
         jobRole: r.jobRole,
       }));
-    const saved = await db.contact.createMany({ data, skipDuplicates: true });
+    const saved = await tx.contact.createMany({ data, skipDuplicates: true });
     revalidatePath("/contacts");
     revalidatePath("/compose");
     return {
@@ -198,13 +212,13 @@ export async function refreshReplies() {
 
 export async function savePreferences(input: unknown) {
   const user = await requireUser();
-  return result(async () => {
+  return mutation(user.id, async (tx) => {
     const data = z
       .object({
         preferredRoles: preferredRolesSchema,
       })
       .parse(input);
-    await db.user.update({
+    await tx.user.update({
       where: { id: user.id },
       data,
     });
@@ -220,6 +234,9 @@ export async function addToShortlist(sendId: string): Promise<ActionResult> {
     await db.$transaction(async (tx) => {
       // Use the same user lock as campaign creation to serialize repeat additions and queueing.
       await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${user.id} FOR UPDATE`;
+      const active = await tx.user.findUnique({ where: { id: user.id } });
+      if (!active || active.deletionRequestedAt)
+        throw new AppError("Account unavailable.");
       const send = await tx.send.findFirst({
         where: {
           id,

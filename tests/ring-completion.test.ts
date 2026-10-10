@@ -18,6 +18,7 @@ const batch = {
   sent: 2,
   queued: 0,
   failed: 0,
+  cancelled: 0,
   review: 0,
   pendingDispatch: false,
   outstanding: 0,

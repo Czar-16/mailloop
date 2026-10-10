@@ -16,6 +16,14 @@ export async function POST(request: Request) {
     const reader = request.body?.getReader();
     if (!reader)
       return Response.json({ error: "Choose a PDF." }, { status: 400 });
+    const abortSignal = AbortSignal.timeout(30000);
+    abortSignal.addEventListener(
+      "abort",
+      () => {
+        void reader.cancel().catch(() => {});
+      },
+      { once: true },
+    );
     const chunks: Uint8Array[] = [];
     let size = 0;
     try {
@@ -30,11 +38,13 @@ export async function POST(request: Request) {
             { status: 413 },
           );
         }
+        abortSignal.throwIfAborted();
         chunks.push(value);
       }
     } finally {
       reader.releaseLock();
     }
+    abortSignal.throwIfAborted();
     const boundedRequest = new Request(request.url, {
       method: "POST",
       headers: { "content-type": request.headers.get("content-type") ?? "" },

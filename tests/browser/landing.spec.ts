@@ -234,7 +234,7 @@ test("landing: dark first paint, keyboard switch, persistence, and storage sync"
     .toBe(true);
 });
 
-test("landing: 23-second batch loop, completion fit, pause, and off-screen suspension", async ({
+test("landing: 22-second batch loop, completion fit, pause, and off-screen suspension", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1366, height: 900 });
@@ -248,7 +248,7 @@ test("landing: 23-second batch loop, completion fit, pause, and off-screen suspe
     page.getByRole("button", { name: "Pause batch animation" }),
   ).toBeVisible();
   await expect(ring).toHaveAttribute("aria-label", /0 of 15 emails sent/);
-  await page.clock.runFor(1000);
+  await page.clock.runFor(1100);
   await expect(ring).toHaveAttribute(
     "aria-label",
     /1 of 15 emails sent, 14 queued/,
@@ -277,7 +277,7 @@ test("landing: 23-second batch loop, completion fit, pause, and off-screen suspe
     });
   });
   expect(fits).toBe(true);
-  await page.clock.runFor(5500);
+  await page.clock.runFor(4500);
   await expect(card).toHaveAttribute("data-done", "true");
   await page.clock.runFor(1000);
   await expect(ring).toHaveAttribute("aria-label", /0 of 15 emails sent/);

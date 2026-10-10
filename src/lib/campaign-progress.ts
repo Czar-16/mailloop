@@ -9,6 +9,7 @@ export type CampaignProgressData = {
   queued: number;
   sent: number;
   failed: number;
+  cancelled: number;
   review: number;
   pendingDispatch: boolean;
   outstanding: number;
@@ -31,6 +32,7 @@ export async function readCampaignProgress(
         dispatchedAt: true,
         sentAt: true,
         attemptedAt: true,
+        cancelledAt: true,
       },
     },
   } as const;
@@ -65,7 +67,9 @@ export async function readCampaignProgress(
           (s) => s.status !== "QUEUED" && s.deliveryState !== "UNCERTAIN",
         )
           ? (batchSends
-              .map((s) => s.sentAt ?? s.attemptedAt ?? createdAt)
+              .map(
+                (s) => s.cancelledAt ?? s.sentAt ?? s.attemptedAt ?? createdAt,
+              )
               .sort((a, b) => b.getTime() - a.getTime())[0]
               ?.toISOString() ?? createdAt.toISOString())
           : null,
@@ -78,6 +82,7 @@ export async function readCampaignProgress(
         failed: batchSends.filter(
           (s) => s.status === "FAILED" && s.deliveryState !== "UNCERTAIN",
         ).length,
+        cancelled: batchSends.filter((s) => s.status === "CANCELLED").length,
         review: batchSends.filter((s) => s.deliveryState === "UNCERTAIN")
           .length,
         pendingDispatch: batchSends.some(

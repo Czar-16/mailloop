@@ -1,3 +1,4 @@
+import { AccountControls } from "@/components/launch-controls";
 import { Suspense } from "react";
 import { WorkspaceSkeleton } from "@/components/workspace-skeleton";
 import { Preferences } from "@/components/preferences";
@@ -62,12 +63,13 @@ async function SettingsContent() {
           }
         />
       </div>
+      <AccountControls email={user.email} days={user.followUpDays} />
       <section className="panel mt-6 space-y-3 p-6">
         <h2 className="section-label">Sending</h2>
         <p className="text-sm text-body">
-          Your limit is 500 emails in a rolling 24 hours, including
-          reserved queue capacity. Select up to 15 recipients per batch. Sends
-          are spaced 20–60 seconds apart.
+          Your limit is 500 emails in a rolling 24 hours, including reserved
+          queue capacity. Select up to 15 recipients per batch. Sends are spaced
+          20–60 seconds apart.
         </p>
         <p className="text-xs text-body">
           Gmail may enforce additional limits. Estimated queue times do not

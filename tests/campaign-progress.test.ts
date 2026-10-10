@@ -23,6 +23,7 @@ const batch: CampaignProgressData = {
   sent: 0,
   queued: 0,
   failed: 0,
+  cancelled: 0,
   review: 0,
   pendingDispatch: false,
   outstanding: 0,
@@ -33,13 +34,23 @@ const render = (data: CampaignProgressData) =>
   renderToStaticMarkup(createElement(CampaignProgress, { data }));
 
 describe("History batch progress edge states", () => {
+  it("describes cancellation without celebrating successful delivery", () => {
+    const html = render({
+      ...batch,
+      cancelled: 3,
+      finishedAt: batch.observedAt,
+    });
+    expect(html).toContain("0 sent, 3 cancelled, 0 failed");
+    expect(html).not.toContain("ALL SENT");
+    expect(html).not.toContain("All messages confirmed");
+  });
   it("renders zero totals without invalid proportions or missing tiles", () => {
     const html = render(batch);
     expect(html).not.toMatch(/NaN|Infinity/);
     expect(html).toContain("0 of 0 sent");
     for (const label of ["Sent", "Queued", "Failed"])
       expect(html).toContain(`>${label}</dt>`);
-    expect(html.match(/width:0%/g)).toHaveLength(4);
+    expect(html.match(/width:0%/g)).toHaveLength(5);
     expect(
       renderToStaticMarkup(createElement(CampaignProgress, { data: null })),
     ).toBe("");
@@ -50,7 +61,7 @@ describe("History batch progress edge states", () => {
     expect(html).toContain("NEEDS REVIEW");
     expect(html).toContain("Delivery needs review · 2");
     expect(html).toContain(
-      "0 sent, 0 queued, 0 failed, 2 need review out of 2",
+      "0 sent, 0 queued, 0 failed, 0 cancelled, 2 need review out of 2",
     );
     expect(html).toContain("Sending");
     expect(html).not.toContain("All messages confirmed by the service.");

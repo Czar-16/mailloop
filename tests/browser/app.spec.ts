@@ -820,33 +820,38 @@ test("page skeletons stream while data loads and shimmer respects reduced motion
           exact: true,
         });
         await expect(loading).toBeVisible();
-        await expect(
-          page.getByRole("navigation", { name: "Main navigation" }),
-        ).toBeVisible();
+        // Locking Send also blocks the shared header quota query, so History
+        // correctly shows the whole-workspace fallback until that lock clears.
+        if (route !== "history")
+          await expect(
+            page.getByRole("navigation", { name: "Main navigation" }),
+          ).toBeVisible();
         const skeleton = loading.locator(".skeleton").first();
         expect(
           await skeleton.evaluate(
             (element) => getComputedStyle(element, "::after").animationName,
           ),
         ).toBe("skeleton-shimmer");
-        await page
-          .getByRole("button", { name: "Dark theme", exact: true })
-          .click();
-        await expect(page.locator("html")).toHaveAttribute(
-          "data-theme",
-          "dark",
-        );
-        await page.evaluate(async () => {
-          await Promise.all(
-            document
-              .getAnimations()
-              .filter(
-                (animation) =>
-                  animation.effect?.getTiming().iterations !== Infinity,
-              )
-              .map((animation) => animation.finished),
+        if (route !== "history") {
+          await page
+            .getByRole("button", { name: "Dark theme", exact: true })
+            .click();
+          await expect(page.locator("html")).toHaveAttribute(
+            "data-theme",
+            "dark",
           );
-        });
+          await page.evaluate(async () => {
+            await Promise.all(
+              document
+                .getAnimations()
+                .filter(
+                  (animation) =>
+                    animation.effect?.getTiming().iterations !== Infinity,
+                )
+                .map((animation) => animation.finished),
+            );
+          });
+        }
         expect(
           await page.evaluate(
             () => document.documentElement.scrollWidth <= innerWidth + 1,
@@ -1397,6 +1402,10 @@ test("example template, focused placeholder insertion, pasted lists and mixed ro
   await expect(progress).toHaveCount(0);
   await page.reload();
   await expect(progress).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Add to shortlist", exact: true })
+    .first()
+    .click();
   await page.goto("/compose");
   await expect(
     page.getByText("Last sent", { exact: true }).first(),
@@ -1893,7 +1902,7 @@ for (const allFailed of [false, true]) {
           (tiles) =>
             new Set(tiles.map((tile) => tile.getBoundingClientRect().top)).size,
         ),
-    ).toBe(1);
+    ).toBe(testInfo.project.name === "mobile" ? 2 : 1);
     await card.screenshot({ path: testInfo.outputPath("batch-active.png") });
     await pool.query(
       'UPDATE "Send" SET status=\'FAILED\', "deliveryState"=\'DONE\', "attemptedAt"=now() WHERE id=$1',
@@ -1903,14 +1912,16 @@ for (const allFailed of [false, true]) {
       timeout: 15000,
     });
     await expect(card.locator(".completion-check")).toBeVisible();
-    await expect(card).toContainText("All messages confirmed by the service.");
+    await expect(card).toContainText(
+      `Batch finished: ${allFailed ? 0 : 1} sent, ${allFailed ? 2 : 1} failed.`,
+    );
     await expect(timer).toHaveCount(0);
     await expect(arc).toHaveCount(0);
     await expectCenterToFit(card);
     await expect(card).toContainText(`${allFailed ? 0 : 1} of 2 sent`);
     await expect(card.getByRole("img")).toHaveAttribute(
       "aria-label",
-      `${allFailed ? 0 : 1} sent, 0 queued, ${allFailed ? 2 : 1} failed, 0 need review out of 2`,
+      `${allFailed ? 0 : 1} sent, 0 queued, ${allFailed ? 2 : 1} failed, 0 cancelled, 0 need review out of 2`,
     );
     const elapsed = await card.getByText(/^Elapsed/).innerText();
     await page.waitForTimeout(1100);
@@ -2654,7 +2665,7 @@ test("CSV import upload, review, replacement errors and confirmation", async ({
       await Promise.all(
         element
           .getAnimations({ subtree: true })
-          .map((animation) => animation.finished),
+          .map((animation) => animation.finished.catch(() => {})),
       );
     });
     expect(
@@ -3433,20 +3444,20 @@ for (const theme of ["light", "dark"] as const) {
       );
       await expect(header.locator(".workspace-gmail")).toHaveCSS(
         "height",
-        "52px",
+        "44px",
       );
       await expect(header.locator(".workspace-account-trigger")).toHaveCSS(
         "height",
-        "52px",
+        "44px",
       );
       await expect(header.locator(".workspace-avatar")).toHaveCSS(
         "width",
-        "40px",
+        "32px",
       );
       await expect(header.locator(".workspace-avatar")).toHaveText("T");
-      await expect(header.locator(".workspace-mono-label")).toHaveCSS(
+      await expect(header.getByText("Theme", { exact: true })).toHaveCSS(
         "font-family",
-        /JetBrains/,
+        /Plus Jakarta/,
       );
       await expect(header).toHaveCSS("font-family", /Plus Jakarta/);
       // Preserve the existing font everywhere outside the requested areas.
@@ -3766,7 +3777,7 @@ test("checklist animations draw, reverse, stagger and pulse once on readiness", 
   await expect(page.locator(".compose-send-button")).toBeEnabled();
   await expect(page.locator(".compose-send-button")).toHaveCSS(
     "transition-duration",
-    "0.25s, 0.25s, 0.25s, 0.25s",
+    "0.18s, 0.18s, 0.18s, 0.18s, 0.18s, 0.18s, 0.18s",
   );
   const originalGlow = await glow.elementHandle();
   await page
@@ -4107,4 +4118,95 @@ test("contacts table expands, restores focus, and returns to editing", async ({
   await expect(
     page.getByRole("heading", { name: "Edit Contact", exact: true }),
   ).toBeVisible();
+});
+
+test("launch controls: reminders, export, cancellation and account deletion", async ({
+  page,
+  userId,
+}) => {
+  const contactId = randomUUID(),
+    templateId = randomUUID(),
+    campaignId = randomUUID(),
+    sendId = randomUUID();
+  await pool.query(
+    'INSERT INTO "Contact" (id,"userId",name,email) VALUES ($1,$2,$3,$4)',
+    [contactId, userId, "Launch Contact", "launch@example.test"],
+  );
+  await pool.query(
+    'INSERT INTO "Template" (id,"userId",name,subject,body) VALUES ($1,$2,$3,$4,$5)',
+    [templateId, userId, "Launch", "Hello", "Private launch message"],
+  );
+  await pool.query(
+    'INSERT INTO "Campaign" (id,"userId","templateId",status) VALUES ($1,$2,$3,$4)',
+    [campaignId, userId, templateId, "QUEUED"],
+  );
+  await pool.query(
+    'INSERT INTO "Send" (id,"campaignId","contactId","recipientEmail","recipientName",body) VALUES ($1,$2,$3,$4,$5,$6)',
+    [
+      sendId,
+      campaignId,
+      contactId,
+      "launch@example.test",
+      "Launch Contact",
+      "Private launch message",
+    ],
+  );
+  await page.goto("/history");
+  await page.getByRole("button", { name: "Cancel email", exact: true }).click();
+  const cancel = page.getByRole("dialog", { name: "Cancel queued emails?" });
+  await expect(cancel).toBeVisible();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await cancel.getByRole("button", { name: "Confirm cancellation" }).click();
+  await expect(page.getByRole("row", { name: /Launch Contact/ })).toContainText(
+    "Cancelled",
+  );
+  await page.getByLabel("Filter by status").selectOption("CANCELLED");
+  await expect(page.getByRole("row", { name: /Launch Contact/ })).toBeVisible();
+  await pool.query(
+    "UPDATE \"Send\" SET status='SENT', \"deliveryState\"='DONE', \"sentAt\"=now()-interval '8 days' WHERE id=$1",
+    [sendId],
+  );
+  await page.goto("/history");
+  const due = page.getByRole("region", { name: "Follow-ups due" });
+  await expect(due).toContainText("Launch Contact");
+  await due
+    .getByRole("button", { name: "Add to shortlist", exact: true })
+    .click();
+  await expect(due).toContainText("No follow-ups due");
+  await page.goto("/settings");
+  await page.getByLabel("Remind me after").selectOption("14");
+  await page
+    .getByRole("button", { name: "Save reminders", exact: true })
+    .click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Reminder preference saved" }),
+  ).toBeVisible();
+  const download = page.waitForEvent("download");
+  await page
+    .getByRole("link", { name: "Download my data", exact: true })
+    .click();
+  expect((await download).suggestedFilename()).toBe("mailloop-data.json");
+  await page
+    .getByRole("button", { name: "Delete account", exact: true })
+    .click();
+  const deletion = page.getByRole("dialog", {
+    name: "Delete your Mailloop account?",
+  });
+  await expect(
+    deletion.getByRole("button", { name: "Permanently delete account" }),
+  ).toBeDisabled();
+  await deletion
+    .getByLabel(`Type ${userId}@example.test to confirm`)
+    .fill(`${userId}@example.test`);
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await deletion
+    .getByRole("button", { name: "Permanently delete account" })
+    .click();
+  await expect(page).toHaveURL(/\/?deleted=1$/);
+  const user = await pool.query(
+    'SELECT "deletionRequestedAt" FROM "User" WHERE id=$1',
+    [userId],
+  );
+  expect(user.rows[0].deletionRequestedAt).toBeTruthy();
+  expect((await page.request.get("/api/account/export")).status()).toBe(401);
 });

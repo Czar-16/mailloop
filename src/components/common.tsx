@@ -72,6 +72,7 @@ export function Status({ status }: { status: string }) {
   const styles: Record<string, string> = {
     QUEUED: "status-queued",
     SENT: "status-sent",
+    CANCELLED: "text-body bg-muted",
     FAILED: "status-failed",
     REPLIED: "status-replied",
   };

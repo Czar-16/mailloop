@@ -20,6 +20,8 @@ model User {
   googleId              String?      @unique
   gmailAuthorized       Boolean      @default(false)
   preferredRoles        String[]     @default([])
+  deletionRequestedAt   DateTime?
+  followUpDays          Int          @default(7)
   nextSendAt            DateTime?
   currentAttachmentId   String?
   createdAt             DateTime     @default(now())
@@ -99,6 +101,7 @@ model Send {
   campaignId     String
   contactId      String
   status         SendStatus @default(QUEUED)
+  cancelledAt    DateTime?
   sentAt         DateTime?
   gmailMessageId String?
   gmailThreadId  String?
@@ -126,6 +129,7 @@ model Attachment {
 
 enum SendStatus {
   QUEUED
+  CANCELLED
   SENT
   FAILED
   REPLIED

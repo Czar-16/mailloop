@@ -6,8 +6,10 @@ export async function GET() {
   if (!session?.user.id) return new Response("Sign in first.", { status: 401 });
   const user = await db.user.findUnique({
     where: { id: session.user.id },
-    select: { currentAttachmentId: true },
+    select: { currentAttachmentId: true, deletionRequestedAt: true },
   });
+  if (!user || user.deletionRequestedAt)
+    return new Response("Account unavailable.", { status: 403 });
   const file = user?.currentAttachmentId
     ? await db.attachment.findFirst({
         where: { id: user.currentAttachmentId, userId: session.user.id },

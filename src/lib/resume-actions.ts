@@ -28,6 +28,9 @@ export async function removeResume() {
   const user = await requireUser();
   await db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${user.id} FOR UPDATE`;
+    const active = await tx.user.findUnique({ where: { id: user.id } });
+    if (!active || active.deletionRequestedAt)
+      throw new Error("Account unavailable.");
     await tx.user.update({
       where: { id: user.id },
       data: { currentAttachmentId: null },

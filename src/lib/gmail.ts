@@ -7,12 +7,21 @@ import { AppError } from "@/lib/errors";
 
 export async function gmailForUser(userId: string) {
   const user = await db.user.findUniqueOrThrow({ where: { id: userId } });
-  if (!user.gmailAuthorized || !user.encryptedRefreshToken)
+  if (
+    user.deletionRequestedAt ||
+    !user.gmailAuthorized ||
+    !user.encryptedRefreshToken
+  )
     throw new AppError("Reconnect Gmail in Settings.");
   const oauth = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
   );
+  oauth.transporter.defaults = {
+    timeout: 15000,
+    retry: false,
+    signal: AbortSignal.timeout(120000),
+  };
   oauth.setCredentials({
     refresh_token: decryptToken(user.encryptedRefreshToken),
   });

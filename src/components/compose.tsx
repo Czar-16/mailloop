@@ -259,7 +259,7 @@ export function Compose({
             {[false, true].map((blocked) => (
               <div key={String(blocked)} className="space-y-4">
                 {blocked && filteredContacts.some((c) => c.blocked) && (
-                  <h3 className="text-sm font-semibold">Pending delivery</h3>
+                  <h2 className="text-sm font-semibold">Pending delivery</h2>
                 )}
                 {filteredContacts
                   .filter((c) => c.blocked === blocked)

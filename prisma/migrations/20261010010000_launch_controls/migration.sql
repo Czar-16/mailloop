@@ -1,0 +1,4 @@
+ALTER TYPE "SendStatus" ADD VALUE 'CANCELLED';
+ALTER TABLE "Send" ADD COLUMN "cancelledAt" TIMESTAMP(3);
+ALTER TABLE "User" ADD COLUMN "deletionRequestedAt" TIMESTAMP(3), ADD COLUMN "followUpDays" INTEGER NOT NULL DEFAULT 7;
+ALTER TABLE "User" ADD CONSTRAINT "User_followUpDays_check" CHECK ("followUpDays" IN (0, 3, 7, 14));

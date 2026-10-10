@@ -30,6 +30,9 @@ export async function createCampaign(userId: string, input: unknown) {
   return db.$transaction(
     async (tx) => {
       await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`;
+      const active = await tx.user.findUnique({ where: { id: userId } });
+      if (!active || active.deletionRequestedAt)
+        throw new AppError("Account unavailable.");
       const previous = await tx.campaign.findFirst({
         where: { userId, idempotencyKey: data.idempotencyKey },
       });

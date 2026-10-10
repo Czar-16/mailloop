@@ -12,6 +12,8 @@ import {
 } from "@/lib/gmail";
 import { readAttachment, cleanupAttachments } from "@/lib/storage";
 import { quotaWhere } from "@/lib/campaigns";
+import { completeCampaignIn } from "@/lib/cancellation";
+import { cleanupDeletedAccount } from "@/lib/account";
 import { AppError } from "@/lib/errors";
 
 export const inngest = new Inngest({
@@ -19,9 +21,16 @@ export const inngest = new Inngest({
   isDev:
     process.env.NODE_ENV !== "production" && process.env.INNGEST_DEV === "1",
 });
+async function activeAccount(userId: string) {
+  return db.user.findFirst({
+    where: { id: userId, deletionRequestedAt: null },
+    select: { id: true },
+  });
+}
 const eventSchema = z.object({ userId: z.uuid(), sendId: z.uuid() });
 
 export async function dispatchPending(userId: string) {
+  if (!(await activeAccount(userId))) return 0;
   const pending = await db.send.findMany({
     where: { campaign: { userId }, status: "QUEUED", dispatchedAt: null },
     select: { id: true },
@@ -42,18 +51,9 @@ export async function dispatchPending(userId: string) {
   return pending.length;
 }
 async function completeCampaign(userId: string, campaignId: string) {
-  const rows = await db.send.findMany({
-    where: { campaignId, campaign: { userId } },
-    select: { status: true },
-  });
-  const status = rows.some((s) => s.status === "QUEUED")
-    ? "SENDING"
-    : rows.every((s) => ["SENT", "REPLIED"].includes(s.status))
-      ? "COMPLETED"
-      : "COMPLETED_WITH_ERRORS";
-  await db.campaign.updateMany({
-    where: { id: campaignId, userId },
-    data: { status },
+  await db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`;
+    await completeCampaignIn(tx, userId, campaignId);
   });
 }
 async function reconcile(userId: string, sendId: string) {
@@ -111,13 +111,14 @@ export async function deliverOne(
   outcome: "done" | "wait" | "retry" | "uncertain";
   until?: number;
 }> {
+  if (!(await activeAccount(userId))) return { outcome: "done" };
   const send = await db.send.findFirst({
     where: { id: sendId, campaign: { userId } },
     include: { campaign: { include: { attachment: true } } },
   });
   if (
     !send ||
-    ["SENT", "REPLIED"].includes(send.status) ||
+    ["SENT", "REPLIED", "CANCELLED"].includes(send.status) ||
     send.deliveryState === "DONE"
   )
     return { outcome: "done" };
@@ -145,11 +146,16 @@ export async function deliverOne(
   }
   const claim = await db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`;
-    const user = await tx.user.findUniqueOrThrow({ where: { id: userId } });
-    const current = await tx.send.findFirstOrThrow({
+    const user = await tx.user.findUnique({ where: { id: userId } });
+    if (!user || user.deletionRequestedAt) return { outcome: "done" as const };
+    const current = await tx.send.findFirst({
       where: { id: sendId, campaign: { userId } },
     });
-    if (current.status !== "QUEUED" || current.deliveryState !== "READY")
+    if (
+      !current ||
+      current.status !== "QUEUED" ||
+      current.deliveryState !== "READY"
+    )
       return { outcome: "done" as const };
     if (user.nextSendAt && user.nextSendAt.getTime() > Date.now())
       return { outcome: "wait" as const, until: user.nextSendAt.getTime() };
@@ -220,7 +226,7 @@ export async function deliverOne(
   } catch (error) {
     const code = providerCode(error);
     if (code === 401 || isInvalidGrant(error))
-      await db.user.update({
+      await db.user.updateMany({
         where: { id: userId },
         data: { gmailAuthorized: false },
       });
@@ -261,7 +267,7 @@ export async function deliverOne(
     await completeCampaign(userId, send.campaignId);
     return { outcome: updated.count && uncertain ? "uncertain" : "done" };
   } finally {
-    await db.user.update({
+    await db.user.updateMany({
       where: { id: userId },
       data: { nextSendAt: new Date(Date.now() + randomInt(20, 61) * 1000) },
     });
@@ -335,6 +341,7 @@ export const sendEmail = inngest.createFunction(
                 id: sendId,
                 campaign: { userId },
                 deliveryState: "READY",
+                status: "QUEUED",
               },
               data: {
                 status: "FAILED",
@@ -362,6 +369,7 @@ export const sendEmail = inngest.createFunction(
 );
 
 export async function replyCandidates(userId: string, force = false) {
+  if (!(await activeAccount(userId))) return [];
   return db.send.findMany({
     where: {
       campaign: { userId },
@@ -397,6 +405,7 @@ export async function replyCandidates(userId: string, force = false) {
   });
 }
 export async function checkOneReply(userId: string, sendId: string) {
+  if (!(await activeAccount(userId))) return false;
   const send = await db.send.findFirst({
     where: { id: sendId, campaign: { userId } },
   });
@@ -442,7 +451,7 @@ export async function checkOneReply(userId: string, sendId: string) {
     return !!replied;
   } catch (e) {
     if (providerCode(e) === 401 || isInvalidGrant(e))
-      await db.user.update({
+      await db.user.updateMany({
         where: { id: userId },
         data: { gmailAuthorized: false },
       });
@@ -493,15 +502,29 @@ export const maintenance = inngest.createFunction(
       const ids: string[] = await step.run(`users-${page}`, async () =>
         (
           await db.user.findMany({
+            where: cursor ? { id: { gt: cursor } } : {},
             select: { id: true },
             orderBy: { id: "asc" },
             take: 100,
-            ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
           })
         ).map((u) => u.id),
       );
       if (!ids.length) break;
       for (const userId of ids) {
+        const disabled = await step.run(`account-${userId}`, () =>
+          db.user.findUnique({
+            where: { id: userId },
+            select: { deletionRequestedAt: true },
+          }),
+        );
+        if (!disabled || disabled.deletionRequestedAt) {
+          await step.run(`delete-${userId}`, () =>
+            // Keep a failed account disabled and retry next minute without
+            // blocking dispatch or cleanup for other accounts.
+            cleanupDeletedAccount(userId).catch(() => false),
+          );
+          continue;
+        }
         await step.run(`dispatch-${userId}`, () => dispatchPending(userId));
         await step.run(`cleanup-${userId}`, () => cleanupAttachments(userId));
       }
@@ -521,11 +544,14 @@ export const scheduledReplies = inngest.createFunction(
       const ids: string[] = await step.run(`users-${page}`, async () =>
         (
           await db.user.findMany({
-            where: { gmailAuthorized: true },
+            where: {
+              gmailAuthorized: true,
+              deletionRequestedAt: null,
+              ...(cursor ? { id: { gt: cursor } } : {}),
+            },
             select: { id: true },
             orderBy: { id: "asc" },
             take: 100,
-            ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
           })
         ).map((u) => u.id),
       );

@@ -1,8 +1,8 @@
 import "server-only";
-import { mkdir, readFile, writeFile, unlink } from "node:fs/promises";
+import { mkdir, readFile, writeFile, unlink, rm } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { get, del } from "@vercel/blob";
+import { get, del, list } from "@vercel/blob";
 import { db } from "@/lib/db";
 import { MAX_PDF_BYTES, validatePdf } from "@/lib/validation";
 import { AppError } from "@/lib/errors";
@@ -24,12 +24,24 @@ export async function readAttachment(userId: string, storagePath: string) {
   ) {
     return readFile(path.join(process.cwd(), "uploads", storagePath));
   }
-  const blob = await get(storagePath, { access: "private", useCache: false });
+  const abortSignal = AbortSignal.timeout(30000);
+  const blob = await get(storagePath, {
+    access: "private",
+    useCache: false,
+    abortSignal,
+  });
   if (!blob || blob.statusCode !== 200)
     throw new AppError(
       "Resume could not be loaded. Upload it again in Settings.",
     );
   const reader = blob.stream.getReader();
+  abortSignal.addEventListener(
+    "abort",
+    () => {
+      void reader.cancel().catch(() => {});
+    },
+    { once: true },
+  );
   const chunks: Uint8Array[] = [];
   let size = 0;
   try {
@@ -41,11 +53,13 @@ export async function readAttachment(userId: string, storagePath: string) {
         await reader.cancel();
         throw new AppError("Resume exceeds 5 MB.");
       }
+      abortSignal.throwIfAborted();
       chunks.push(value);
     }
   } finally {
     reader.releaseLock();
   }
+  abortSignal.throwIfAborted();
   return Buffer.concat(chunks);
 }
 export async function activateResume(
@@ -57,6 +71,9 @@ export async function activateResume(
   validatePdf(bytes, "application/pdf");
   await db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`;
+    const user = await tx.user.findUnique({ where: { id: userId } });
+    if (!user || user.deletionRequestedAt)
+      throw new AppError("Account unavailable.");
     const existing = await tx.attachment.findFirst({
       where: { userId, storagePath },
     });
@@ -126,7 +143,10 @@ export async function cleanupAttachments(userId: string) {
   for (const file of old) {
     if (!validStoragePath(userId, file.storagePath)) continue;
     try {
-      if (process.env.BLOB_READ_WRITE_TOKEN) await del(file.storagePath);
+      if (process.env.BLOB_READ_WRITE_TOKEN)
+        await del(file.storagePath, {
+          abortSignal: AbortSignal.timeout(15000),
+        });
       else if (process.env.NODE_ENV !== "production")
         await unlink(path.join(process.cwd(), "uploads", file.storagePath));
       // Preserve the attachment row referenced by historical campaigns.
@@ -134,4 +154,32 @@ export async function cleanupAttachments(userId: string) {
       /* Cleanup can be retried after another upload or send. */
     }
   }
+}
+
+export async function deleteOwnedResumes(userId: string) {
+  // UUID IDs are used as exact tenant prefixes; never accept arbitrary path input.
+  if (!/^[a-f0-9-]{36}$/.test(userId)) throw new AppError("Invalid account.");
+  if (process.env.BLOB_READ_WRITE_TOKEN) {
+    let cursor: string | undefined;
+    do {
+      const page = await list({
+        prefix: `resumes/${userId}/`,
+        limit: 100,
+        cursor,
+        abortSignal: AbortSignal.timeout(15000),
+      });
+      if (page.blobs.length)
+        await del(
+          page.blobs.map((blob) => blob.url),
+          { abortSignal: AbortSignal.timeout(15000) },
+        );
+      cursor = page.hasMore ? page.cursor : undefined;
+    } while (cursor);
+  } else if (process.env.NODE_ENV === "production") {
+    throw new AppError("Private Blob storage is not configured.");
+  }
+  await rm(path.join(process.cwd(), "uploads", "resumes", userId), {
+    recursive: true,
+    force: true,
+  });
 }

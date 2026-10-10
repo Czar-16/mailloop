@@ -310,7 +310,8 @@ function BatchRing({
 
 function BatchProgress({ data }: { data: CampaignProgressData }) {
   const [now, setNow] = useState(Date.parse(data.observedAt));
-  const total = data.sent + data.queued + data.failed + data.review;
+  const total =
+    data.sent + data.queued + data.failed + data.review + (data.cancelled ?? 0);
   const estimateKey = `${data.id}:${data.outstanding}:${data.nextSendAt}`;
   const makeEstimate = () => {
     const observed = Date.parse(data.observedAt);
@@ -394,6 +395,12 @@ function BatchProgress({ data }: { data: CampaignProgressData }) {
       caption: "Needs attention",
     },
   ];
+  stats.push({
+    label: "Cancelled",
+    count: data.cancelled ?? 0,
+    color: "var(--body)",
+    caption: "Stopped before sending",
+  });
   const segments: BatchSegment[] = [
     ...stats,
     { label: "Needs review", count: data.review, color: "var(--body)" },
@@ -441,7 +448,7 @@ function BatchProgress({ data }: { data: CampaignProgressData }) {
           <div
             className="mb-3.5 flex h-2 overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--ring-track)_25%,transparent)]"
             role="img"
-            aria-label={`${data.sent} sent, ${data.queued} queued, ${data.failed} failed, ${data.review} need review out of ${total}`}
+            aria-label={`${data.sent} sent, ${data.queued} queued, ${data.failed} failed, ${data.cancelled ?? 0} cancelled, ${data.review} need review out of ${total}`}
           >
             {segments.map((segment) => (
               <span
@@ -453,7 +460,7 @@ function BatchProgress({ data }: { data: CampaignProgressData }) {
               />
             ))}
           </div>
-          <dl className="grid grid-cols-3 gap-2.5">
+          <dl className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
             {stats.map((stat) => (
               <div
                 key={stat.label}
@@ -508,7 +515,11 @@ function BatchProgress({ data }: { data: CampaignProgressData }) {
       <p className="border-t border-border pt-3 text-xs text-body">
         {active
           ? "Retries and service delays can extend this estimate. Delivery completes only when the service confirms the outcome."
-          : "All messages confirmed by the service."}
+          : data.cancelled
+            ? `Batch finished: ${data.sent} sent, ${data.cancelled} cancelled, ${data.failed} failed.`
+            : data.failed
+              ? `Batch finished: ${data.sent} sent, ${data.failed} failed.`
+              : "All messages confirmed by the service."}
       </p>
     </section>
   );

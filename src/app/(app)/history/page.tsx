@@ -1,3 +1,6 @@
+import Link from "next/link";
+import { CancelEmails } from "@/components/launch-controls";
+import { readFollowUps } from "@/lib/follow-ups";
 import { Prisma } from "@/generated/prisma/client";
 import { contactDeliveryState } from "@/lib/shortlist";
 import { AddToShortlist } from "@/components/add-to-shortlist";
@@ -23,6 +26,7 @@ async function HistoryContent({
     status?: string;
     q?: string;
     page?: string;
+    followUpPage?: string;
     campaign?: string;
   }>;
 }) {
@@ -30,10 +34,10 @@ async function HistoryContent({
   const params = await searchParams;
   const page = pageNumber(params.page);
   const q = (params.q ?? "").slice(0, 160);
-  const status = ["QUEUED", "SENT", "FAILED", "REPLIED"].includes(
+  const status = ["QUEUED", "SENT", "FAILED", "REPLIED", "CANCELLED"].includes(
     params.status ?? "",
   )
-    ? (params.status as "QUEUED" | "SENT" | "FAILED" | "REPLIED")
+    ? (params.status as "QUEUED" | "SENT" | "FAILED" | "REPLIED" | "CANCELLED")
     : undefined;
   const where = {
     campaign: { userId: user.id },
@@ -60,6 +64,7 @@ async function HistoryContent({
         where,
         select: {
           id: true,
+          campaignId: true,
           recipientName: true,
           recipientEmail: true,
           recipientCompany: true,
@@ -87,6 +92,12 @@ async function HistoryContent({
         where: { campaign: { userId: user.id }, status: "QUEUED" },
       }),
     ]);
+  const followUpPage = pageNumber(params.followUpPage);
+  const due = await readFollowUps(user.id, user.followUpDays, followUpPage);
+  const checked = await db.send.aggregate({
+    where: { campaign: { userId: user.id } },
+    _max: { lastCheckedAt: true },
+  });
   const contactIds = [...new Set(sends.map((s) => s.contactId))];
   const contactStates = contactIds.length
     ? await db.$queryRaw<
@@ -148,6 +159,82 @@ async function HistoryContent({
         ))}
       </div>
       <CampaignProgress data={progress} />
+      <p className="mb-4 text-xs text-body">
+        Latest reply check:{" "}
+        <DateTime value={checked._max.lastCheckedAt?.toISOString() ?? null} />.
+        Reply detection may be incomplete; use Check Replies before following
+        up.
+      </p>
+      {user.followUpDays > 0 && (
+        <section
+          className="panel mb-6 space-y-4 p-6"
+          aria-label="Follow-ups due"
+        >
+          <h2 className="section-label">Follow-ups due · {due.total}</h2>
+          <p className="text-sm text-body">
+            No detected reply after {user.followUpDays} days. Review in Compose
+            before sending.
+          </p>
+          {!due.contacts.length && (
+            <p className="text-sm text-body">No follow-ups due on this page.</p>
+          )}
+          {due.contacts.map((c) => (
+            <div
+              key={c.id}
+              className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3"
+            >
+              <div className="min-w-0">
+                <p className="break-words">{c.name}</p>
+                <p className="break-all text-xs text-body">{c.email}</p>
+                <p className="text-xs text-body">
+                  Sent <DateTime value={c.sentAt.toISOString()} /> · Reply
+                  checked{" "}
+                  <DateTime value={c.lastCheckedAt?.toISOString() ?? null} />
+                </p>
+              </div>
+              <AddToShortlist
+                sendId={c.sendId}
+                inShortlist={false}
+                blocked={false}
+                active
+              />
+            </div>
+          ))}
+          <nav
+            aria-label="Follow-up pagination"
+            className="flex flex-wrap items-center gap-4 text-sm"
+          >
+            <span>
+              Page {followUpPage} of {Math.max(1, Math.ceil(due.total / 20))}
+            </span>
+            {followUpPage > 1 && (
+              <Link
+                className="inline-flex min-h-11 items-center text-link"
+                href={`/history?${new URLSearchParams({ q, status: status ?? "", page: String(page), followUpPage: String(followUpPage - 1) })}`}
+              >
+                Previous follow-ups
+              </Link>
+            )}
+            {followUpPage * 20 < due.total && (
+              <Link
+                className="inline-flex min-h-11 items-center text-link"
+                href={`/history?${new URLSearchParams({ q, status: status ?? "", page: String(page), followUpPage: String(followUpPage + 1) })}`}
+              >
+                Next follow-ups
+              </Link>
+            )}
+          </nav>
+        </section>
+      )}
+      <div className="mb-4 flex flex-wrap gap-3">
+        {[
+          ...new Set(
+            sends.filter((s) => s.status === "QUEUED").map((s) => s.campaignId),
+          ),
+        ].map((id) => (
+          <CancelEmails key={id} campaignId={id} />
+        ))}
+      </div>
       <HistoryFilters q={q} status={status ?? ""} campaign={params.campaign} />
       {!sends.length ? (
         <EmptyState
@@ -219,6 +306,9 @@ async function HistoryContent({
                     )}
                   </td>
                   <td>
+                    {s.status === "QUEUED" && s.deliveryState === "READY" && (
+                      <CancelEmails sendId={s.id} />
+                    )}
                     {["SENT", "REPLIED"].includes(s.status) && (
                       <AddToShortlist
                         sendId={s.id}
