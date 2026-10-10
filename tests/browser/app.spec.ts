@@ -3460,8 +3460,10 @@ for (const theme of ["light", "dark"] as const) {
         /Plus Jakarta/,
       );
       await expect(header).toHaveCSS("font-family", /Plus Jakarta/);
-      // Preserve the existing font everywhere outside the requested areas.
-      await expect(page.locator("main h1")).toHaveCSS("font-family", /Inter/);
+      await expect(page.locator("main h1")).toHaveCSS(
+        "font-family",
+        /Plus Jakarta/,
+      );
       expect(
         await page.evaluate(() => document.documentElement.scrollWidth),
       ).toBeLessThanOrEqual(page.viewportSize()!.width);

@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Bricolage_Grotesque, DM_Sans } from "next/font/google";
 import { ArrowRight, Mail } from "lucide-react";
 import { auth, signIn } from "@/auth";
 import { db } from "@/lib/db";
@@ -9,18 +8,6 @@ import { ThemeSwitch } from "@/components/landing/theme-switch";
 import { BatchProgressCard } from "@/components/landing/batch-progress-card";
 import { FeatureCards } from "@/components/landing/feature-cards";
 import "@/components/landing/landing.css";
-
-const headings = Bricolage_Grotesque({
-  variable: "--font-landing-heading",
-  subsets: ["latin"],
-  weight: ["700", "800"],
-  display: "swap",
-});
-const body = DM_Sans({
-  variable: "--font-landing-body",
-  subsets: ["latin"],
-  display: "swap",
-});
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -66,7 +53,7 @@ export default async function Home({
     await signIn("google", { redirectTo: "/compose" });
   };
   return (
-    <div className={`landing ${headings.variable} ${body.variable}`}>
+    <div className="landing">
       <header className="landing-container landing-header">
         <Link
           href="/"

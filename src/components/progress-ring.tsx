@@ -218,7 +218,7 @@ export function ProgressRing({
         {!complete && (
           <div className="absolute inset-0 mx-auto grid w-[110px] content-center text-center">
             <b
-              className={`timer-value font-mono ${center === "Sending" ? "text-[18px]" : "text-[30px]"} tracking-[-.04em] tabular-nums`}
+              className={`timer-value font-num font-semibold ${center === "Sending" ? "text-[18px]" : "text-[26px]"} tracking-[-.02em] tabular-nums`}
             >
               {center}
             </b>

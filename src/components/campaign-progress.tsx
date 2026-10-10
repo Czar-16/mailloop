@@ -293,7 +293,7 @@ function BatchRing({
           ) : (
             <>
               <b
-                className={`timer-value font-mono ${caption === "EST. LEFT" ? (center.length <= 4 ? "text-[32px]" : center.length === 5 ? "text-[28px]" : center.length === 6 ? "text-[23px]" : "text-[19px]") : "text-[18px]"} font-medium tracking-[-.04em] tabular-nums`}
+                className={`timer-value font-num ${caption === "EST. LEFT" ? (center.length <= 4 ? "text-[26px]" : center.length === 5 ? "text-[23px]" : center.length === 6 ? "text-[21px]" : "text-[19px]") : "text-[18px]"} font-semibold tracking-[-.02em] tabular-nums`}
               >
                 {center}
               </b>
@@ -474,14 +474,14 @@ function BatchProgress({ data }: { data: CampaignProgressData }) {
                   />
                   {stat.label}
                 </dt>
-                <dd className="mt-1 text-2xl font-medium tabular-nums">
+                <dd className="mt-1 font-num text-2xl font-semibold tracking-[-.02em] tabular-nums">
                   {stat.count}
                 </dd>
                 <dd className="mt-0.5 text-[11px] text-body">{stat.caption}</dd>
               </div>
             ))}
           </dl>
-          <div className="mt-3.5 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs tabular-nums text-body">
+          <div className="mt-3.5 flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-xs tabular-nums text-body">
             <span className="inline-flex items-center gap-1.5">
               <Clock className="size-3.5" aria-hidden="true" />
               Elapsed {Math.floor(elapsed / 60)}m {elapsed % 60}s

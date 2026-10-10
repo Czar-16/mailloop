@@ -1,10 +1,13 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
+import {
+  Plus_Jakarta_Sans,
+  JetBrains_Mono,
+  Space_Grotesk,
+} from "next/font/google";
 import "./globals.css";
 import { themeScript } from "@/lib/theme";
-const sans = Inter({ variable: "--font-inter", subsets: ["latin"] });
-const jakarta = Plus_Jakarta_Sans({
-  variable: "--font-jakarta",
+const sans = Plus_Jakarta_Sans({
+  variable: "--font-plus-jakarta",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700", "800"],
   fallback: ["system-ui", "sans-serif"],
@@ -12,8 +15,14 @@ const jakarta = Plus_Jakarta_Sans({
 const jetbrains = JetBrains_Mono({
   variable: "--font-jetbrains",
   subsets: ["latin"],
-  weight: ["400", "500", "700"],
+  weight: ["400", "500"],
   fallback: ["monospace"],
+});
+const num = Space_Grotesk({
+  variable: "--font-space-grotesk",
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
+  fallback: ["system-ui", "sans-serif"],
 });
 export const metadata: Metadata = {
   metadataBase: new URL("https://mailloop.in"),
@@ -41,12 +50,12 @@ export default function RootLayout({
     <html
       suppressHydrationWarning
       lang="en"
-      className={`${sans.variable} ${jakarta.variable} ${jetbrains.variable} antialiased`}
+      className={`${sans.variable} ${jetbrains.variable} ${num.variable} antialiased`}
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className="min-h-screen">
+      <body className="min-h-screen font-sans">
         <a
           href="#main-content"
           className="fixed left-4 top-4 z-50 -translate-y-24 rounded-sm bg-primary px-4 py-3 text-primary-foreground focus:translate-y-0"

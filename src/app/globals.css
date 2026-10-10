@@ -106,8 +106,9 @@
   --color-error-deep: var(--destructive);
   --color-warning: var(--warning);
   --color-warning-soft: var(--warning-soft);
-  --font-sans: var(--font-inter);
-  --font-mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+  --font-sans: var(--font-plus-jakarta), system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), monospace;
+  --font-num: var(--font-space-grotesk), system-ui, sans-serif;
   --radius-sm: 12px;
   --radius-md: 12px;
   --radius-lg: 20px;
@@ -122,7 +123,7 @@
       ),
       var(--background);
     color: var(--foreground);
-    font-family: var(--font-inter), system-ui, sans-serif;
+    font-family: var(--font-sans);
     font-size: 14px;
     line-height: 1.5;
   }
@@ -224,7 +225,7 @@
   box-shadow: var(--shadow);
 }
 @utility eyebrow {
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 16px;
   letter-spacing: 0.14em;
@@ -746,7 +747,7 @@ table {
   min-width: 560px;
 }
 textarea {
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-sans);
   resize: vertical;
 }
 @media (max-width: 860px) {
@@ -1564,7 +1565,7 @@ dialog.tutorial-dialog[data-phase="closing"]::backdrop {
   background: var(--accent-soft);
 }
 .tutorial-placeholder-chips {
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-sans);
 }
 .tutorial-mini-link {
   color: var(--link);
@@ -1641,8 +1642,10 @@ dialog.tutorial-dialog[data-phase="closing"]::backdrop {
   background: var(--surface);
 }
 .tutorial-mini-ring strong {
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-num);
   font-size: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 .tutorial-mini-legend {
   display: flex;
@@ -1764,7 +1767,7 @@ dialog.tutorial-dialog[data-phase="closing"]::backdrop {
 .workspace-header-controls,
 .send-checklist,
 .compose-send-button {
-  font-family: var(--font-jakarta), system-ui, sans-serif;
+  font-family: var(--font-sans);
 }
 .workspace-header-controls {
   --workspace-track: #e2dcf7;
@@ -1796,12 +1799,12 @@ dialog.tutorial-dialog[data-phase="closing"]::backdrop {
   transform: translateX(34px);
 }
 .workspace-header-controls > .inline-flex > span {
-  font-family: var(--font-jakarta), system-ui, sans-serif;
+  font-family: var(--font-sans);
   font-size: 12px;
   color: var(--muted-foreground, #55507f);
 }
 .workspace-mono-label {
-  font-family: var(--font-jetbrains), monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 400;
   letter-spacing: 0.16em;

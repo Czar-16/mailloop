@@ -27,7 +27,7 @@
   min-height: 100vh;
   background: var(--landing-bg);
   color: var(--landing-fg);
-  font-family: var(--font-landing-body), system-ui, sans-serif;
+  font-family: var(--font-sans);
   font-size: 16px;
   line-height: 1.55;
 }
@@ -78,7 +78,7 @@ html[data-theme="dark"]:has(.landing) {
 .landing h3,
 .landing-logo,
 .landing-footer-wordmark {
-  font-family: var(--font-landing-heading), system-ui, sans-serif;
+  font-family: var(--font-sans);
 }
 .landing a:focus-visible,
 .landing button:focus-visible {
@@ -214,7 +214,7 @@ html[data-theme="dark"]:has(.landing) {
   padding-block: 56px 80px;
 }
 .landing-eyebrow {
-  font-family: var(--font-jetbrains), monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   font-weight: 500;
   text-transform: uppercase;
@@ -225,8 +225,8 @@ html[data-theme="dark"]:has(.landing) {
 .landing h1 {
   font-size: clamp(40px, 6vw, 72px);
   font-weight: 800;
-  line-height: 1;
-  letter-spacing: -0.03em;
+  line-height: 1.03;
+  letter-spacing: -0.035em;
   max-width: 550px;
 }
 .landing-gradient-text {
@@ -323,7 +323,7 @@ html[data-theme="dark"]:has(.landing) {
 }
 .landing-step-number {
   display: block;
-  font-family: var(--font-jetbrains), monospace;
+  font-family: var(--font-sans);
   font-size: 14px;
   color: var(--landing-accent-text);
   margin-bottom: 28px;
@@ -466,7 +466,7 @@ html[data-theme="dark"]:has(.landing) {
   gap: 12px;
 }
 .landing-batch-label {
-  font-family: var(--font-jetbrains), monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.16em;
@@ -555,16 +555,19 @@ html[data-theme="dark"]:has(.landing) {
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  font-family: var(--font-jetbrains), monospace;
+  font-family: var(--font-num);
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 .landing-countdown > span {
   min-width: 4ch;
   text-align: center;
-  font-size: 28px;
+  font-size: 26px;
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
 }
 .landing-countdown small {
+  font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.14em;
   color: var(--landing-faint);
@@ -594,7 +597,7 @@ html[data-theme="dark"]:has(.landing) {
   pointer-events: none;
 }
 .landing-completion-label {
-  font-family: var(--font-jetbrains), monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   line-height: 1;
   letter-spacing: 0.14em;
@@ -702,8 +705,10 @@ html[data-theme="dark"]:has(.landing) {
   flex-shrink: 0;
 }
 .landing-stat-value {
-  font-size: 26px;
-  font-weight: 500;
+  font-family: var(--font-num);
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
   line-height: 1.6;
   font-variant-numeric: tabular-nums;
 }
@@ -718,6 +723,7 @@ html[data-theme="dark"]:has(.landing) {
   gap: 4px 14px;
   margin-top: 14px;
   font-size: 13px;
+  font-family: var(--font-mono);
   color: var(--landing-muted);
   font-variant-numeric: tabular-nums;
 }
