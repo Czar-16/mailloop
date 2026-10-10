@@ -227,44 +227,96 @@ export async function savePreferences(input: unknown) {
   });
 }
 
+async function restoreShortlistContact(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  contactId: string,
+) {
+  const [contact] = await tx.$queryRaw<
+    {
+      id: string;
+      blocked: boolean;
+      followUp: boolean;
+      previouslySent: boolean;
+    }[]
+  >(Prisma.sql`
+    SELECT c.id, state.* FROM "Contact" c
+    CROSS JOIN LATERAL (${contactDeliveryState}) state
+    WHERE c.id = ${contactId} AND c."userId" = ${userId} AND c."archivedAt" IS NULL`);
+  if (!contact) throw new AppError("Contact is unavailable.");
+  if (contact.blocked)
+    throw new AppError(
+      "Wait for pending delivery to resolve before adding to the shortlist.",
+    );
+  await tx.contact.updateMany({
+    where: { id: contact.id, userId, archivedAt: null },
+    data: {
+      shortlistRemovedAt: null,
+      ...(contact.previouslySent && !contact.followUp
+        ? { followUpRequestedAt: new Date() }
+        : {}),
+    },
+  });
+  revalidatePath("/compose");
+  revalidatePath("/contacts");
+  revalidatePath("/history");
+  return { ok: true, message: "In shortlist" };
+}
+
 export async function addToShortlist(sendId: string): Promise<ActionResult> {
   const user = await requireUser();
-  return result(async () => {
-    const id = z.uuid().parse(sendId);
-    await db.$transaction(async (tx) => {
-      // Use the same user lock as campaign creation to serialize repeat additions and queueing.
-      await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${user.id} FOR UPDATE`;
-      const active = await tx.user.findUnique({ where: { id: user.id } });
-      if (!active || active.deletionRequestedAt)
-        throw new AppError("Account unavailable.");
-      const send = await tx.send.findFirst({
-        where: {
-          id,
-          campaign: { userId: user.id },
-          status: { in: ["SENT", "REPLIED"] },
-        },
-        select: { contactId: true },
-      });
-      if (!send) throw new AppError("Successful delivery not found.");
-      const [contact] = await tx.$queryRaw<
-        { id: string; blocked: boolean; followUp: boolean }[]
-      >(Prisma.sql`
-        SELECT c.id, state.blocked, state."followUp" FROM "Contact" c
-        CROSS JOIN LATERAL (${contactDeliveryState}) state
-        WHERE c.id = ${send.contactId} AND c."userId" = ${user.id} AND c."archivedAt" IS NULL`);
-      if (!contact) throw new AppError("Contact is unavailable.");
-      if (contact.blocked)
-        throw new AppError(
-          "Wait for pending delivery to resolve before adding a follow-up.",
-        );
-      if (!contact.followUp)
-        await tx.contact.updateMany({
-          where: { id: contact.id, userId: user.id, archivedAt: null },
-          data: { followUpRequestedAt: new Date() },
-        });
+  return mutation(user.id, async (tx) => {
+    const send = await tx.send.findFirst({
+      where: {
+        id: z.uuid().parse(sendId),
+        campaign: { userId: user.id },
+        status: { in: ["SENT", "REPLIED"] },
+      },
+      select: { contactId: true },
+    });
+    if (!send) throw new AppError("Successful delivery not found.");
+    return restoreShortlistContact(tx, user.id, send.contactId);
+  });
+}
+
+export async function addContactToShortlist(
+  contactId: string,
+): Promise<ActionResult> {
+  const user = await requireUser();
+  return mutation(user.id, (tx) =>
+    restoreShortlistContact(tx, user.id, z.uuid().parse(contactId)),
+  );
+}
+
+export async function removeFromShortlist(
+  contactId: string,
+): Promise<ActionResult> {
+  const user = await requireUser();
+  return mutation(user.id, async (tx) => {
+    const id = z.uuid().parse(contactId);
+    const [contact] = await tx.$queryRaw<
+      { id: string; blocked: boolean }[]
+    >(Prisma.sql`
+      SELECT c.id, state.blocked FROM "Contact" c
+      CROSS JOIN LATERAL (${contactDeliveryState}) state
+      WHERE c.id = ${id} AND c."userId" = ${user.id} AND c."archivedAt" IS NULL`);
+    if (!contact) throw new AppError("Contact is unavailable.");
+    if (contact.blocked)
+      throw new AppError(
+        "Wait for pending delivery to resolve before removing this person.",
+      );
+    await tx.contact.updateMany({
+      where: {
+        id,
+        userId: user.id,
+        archivedAt: null,
+        shortlistRemovedAt: null,
+      },
+      data: { shortlistRemovedAt: new Date(), followUpRequestedAt: null },
     });
     revalidatePath("/compose");
+    revalidatePath("/contacts");
     revalidatePath("/history");
-    return { ok: true, message: "In shortlist" };
+    return { ok: true, message: "Removed from shortlist." };
   });
 }

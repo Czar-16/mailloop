@@ -33,7 +33,7 @@ export type ShortlistContact = {
 export async function readShortlist(userId: string, q = "", page = 1) {
   // Literal search: %, _ and backslashes must not become LIKE patterns.
   const search = `%${q.replace(/[\\%_]/g, "\\$&")}%`;
-  const where = Prisma.sql`c."userId" = ${userId} AND c."archivedAt" IS NULL
+  const where = Prisma.sql`c."userId" = ${userId} AND c."archivedAt" IS NULL AND c."shortlistRemovedAt" IS NULL
     AND (c.name ILIKE ${search} OR c.email ILIKE ${search} OR c.company ILIKE ${search})
     AND (state.blocked OR NOT state."previouslySent" OR state."followUp")`;
   const [contacts, counts] = await Promise.all([
@@ -41,6 +41,26 @@ export async function readShortlist(userId: string, q = "", page = 1) {
       SELECT c.id, c.name, c.email, c.company, c."jobRole", state.*
       FROM "Contact" c CROSS JOIN LATERAL (${contactDeliveryState}) state
       WHERE ${where} ORDER BY c.name, c.id LIMIT 20 OFFSET ${(page - 1) * 20}`),
+    db.$queryRaw<{ total: bigint }[]>(Prisma.sql`
+      SELECT count(*) AS total FROM "Contact" c CROSS JOIN LATERAL (${contactDeliveryState}) state WHERE ${where}`),
+  ]);
+  return { contacts, total: Number(counts[0].total) };
+}
+
+// Contacts retain removed unsent people so they can be re-added, but completed
+// recipients return only when History explicitly opens another follow-up.
+export async function readContacts(userId: string, q = "", page = 1) {
+  const search = `%${q.replace(/[\\%_]/g, "\\$&")}%`;
+  const where = Prisma.sql`c."userId" = ${userId} AND c."archivedAt" IS NULL
+    AND (c.name ILIKE ${search} OR c.email ILIKE ${search} OR c.company ILIKE ${search})
+    AND (state.blocked OR NOT state."previouslySent" OR state."followUp")`;
+  const [contacts, counts] = await Promise.all([
+    db.$queryRaw<
+      (ShortlistContact & { shortlistRemovedAt: Date | null })[]
+    >(Prisma.sql`
+      SELECT c.id, c.name, c.email, c.company, c."jobRole", c."shortlistRemovedAt", state.*
+      FROM "Contact" c CROSS JOIN LATERAL (${contactDeliveryState}) state
+      WHERE ${where} ORDER BY c."createdAt" DESC, c.id LIMIT 20 OFFSET ${(page - 1) * 20}`),
     db.$queryRaw<{ total: bigint }[]>(Prisma.sql`
       SELECT count(*) AS total FROM "Contact" c CROSS JOIN LATERAL (${contactDeliveryState}) state WHERE ${where}`),
   ]);

@@ -53,7 +53,12 @@ export async function createCampaign(userId: string, input: unknown) {
       if (!template) throw new AppError("Choose an available template.");
       templateSchema.parse(template);
       const contacts = await tx.contact.findMany({
-        where: { id: { in: data.recipientIds }, userId, archivedAt: null },
+        where: {
+          id: { in: data.recipientIds },
+          userId,
+          archivedAt: null,
+          shortlistRemovedAt: null,
+        },
       });
       if (contacts.length !== data.recipientIds.length)
         throw new AppError("One or more contacts are unavailable.");

@@ -282,6 +282,22 @@ describe.runIf(enabled)(
         }),
       ).toBe(0);
     });
+    it("rejects removed recipients in stale campaign selections", async () => {
+      await db.contact.updateMany({
+        where: { id: contactId, userId },
+        data: { shortlistRemovedAt: new Date() },
+      });
+      await expect(createCampaign(userId, request())).rejects.toThrow(
+        "One or more contacts are unavailable.",
+      );
+      expect(await db.campaign.count({ where: { userId } })).toBe(0);
+      await db.contact.updateMany({
+        where: { id: contactId, userId },
+        data: { shortlistRemovedAt: null },
+      });
+      expect((await createCampaign(userId, request())).count).toBe(1);
+    });
+
     it("snapshots messages and rejects another user’s template/contact", async () => {
       await expect(createCampaign(otherId, request())).rejects.toThrow(
         "template",

@@ -97,6 +97,7 @@ export async function exportAccount(userId: string) {
         tag: true,
         archivedAt: true,
         followUpRequestedAt: true,
+        shortlistRemovedAt: true,
         createdAt: true,
       },
     }),

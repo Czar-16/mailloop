@@ -44,7 +44,7 @@ export function previewParts(
     parts.push({ text: text.slice(cursor), kind: "text" });
   return { parts, errors };
 }
-function Highlighted({ parts }: { parts: PreviewPart[] }) {
+export function Highlighted({ parts }: { parts: PreviewPart[] }) {
   return parts.map((part, i) =>
     part.kind === "text" ? (
       <span key={i}>{part.text}</span>

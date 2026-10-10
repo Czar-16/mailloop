@@ -104,11 +104,12 @@ async function HistoryContent({
         {
           id: string;
           archivedAt: Date | null;
+          shortlistRemovedAt: Date | null;
           blocked: boolean;
           followUp: boolean;
         }[]
       >(Prisma.sql`
-    SELECT c.id, c."archivedAt", state.blocked, state."followUp"
+    SELECT c.id, c."archivedAt", c."shortlistRemovedAt", state.blocked, state."followUp"
     FROM "Contact" c CROSS JOIN LATERAL (${contactDeliveryState}) state
     WHERE c."userId" = ${user.id} AND c.id IN (${Prisma.join(contactIds)})
   `)
@@ -312,7 +313,10 @@ async function HistoryContent({
                     {["SENT", "REPLIED"].includes(s.status) && (
                       <AddToShortlist
                         sendId={s.id}
-                        inShortlist={states.get(s.contactId)?.followUp ?? false}
+                        inShortlist={
+                          !states.get(s.contactId)?.shortlistRemovedAt &&
+                          (states.get(s.contactId)?.followUp ?? false)
+                        }
                         blocked={states.get(s.contactId)?.blocked ?? false}
                         active={
                           !!states.get(s.contactId) &&

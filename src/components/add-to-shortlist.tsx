@@ -1,22 +1,24 @@
 "use client";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { addToShortlist } from "@/lib/actions";
+import { addToShortlist, addContactToShortlist } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
 import { Feedback } from "@/components/forms";
 import type { ActionResult } from "@/lib/errors";
 
 export function AddToShortlist({
   sendId,
+  contactId,
   inShortlist,
   blocked,
   active,
 }: {
-  sendId: string;
   inShortlist: boolean;
   blocked: boolean;
   active: boolean;
-}) {
+} & (
+  { sendId: string; contactId?: never } | { contactId: string; sendId?: never }
+)) {
   const [result, setResult] = useState<ActionResult>();
   const [pending, start] = useTransition();
   const router = useRouter();
@@ -29,12 +31,16 @@ export function AddToShortlist({
         onClick={() =>
           start(async () => {
             try {
-              setResult(await addToShortlist(sendId));
+              setResult(
+                await (contactId
+                  ? addContactToShortlist(contactId)
+                  : addToShortlist(sendId!)),
+              );
               router.refresh();
             } catch {
               setResult({
                 ok: false,
-                message: "Could not add this follow-up. Try again.",
+                message: "Could not add this person. Try again.",
               });
             }
           })

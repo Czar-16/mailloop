@@ -8,6 +8,8 @@ import { WorkspaceSkeleton } from "@/components/workspace-skeleton";
 import { DateTime } from "@/components/date-time";
 import Link from "next/link";
 import { requireUser } from "@/lib/session";
+import { readContacts } from "@/lib/shortlist";
+import { AddToShortlist } from "@/components/add-to-shortlist";
 import { db } from "@/lib/db";
 import { PageHeading, EmptyState } from "@/components/common";
 import { ContactForm, DeleteButton } from "@/components/forms";
@@ -26,38 +28,8 @@ async function ContactsContent({
   const params = await searchParams;
   const q = (params.q ?? "").slice(0, 160);
   const page = pageNumber(params.page);
-  const where = {
-    userId: user.id,
-    archivedAt: null,
-    ...(q
-      ? {
-          OR: [
-            { name: { contains: q, mode: "insensitive" as const } },
-            { email: { contains: q, mode: "insensitive" as const } },
-            { company: { contains: q, mode: "insensitive" as const } },
-          ],
-        }
-      : {}),
-  };
-  const [contacts, total, existing, editing] = await Promise.all([
-    db.contact.findMany({
-      where,
-      include: {
-        sends: {
-          where: {
-            campaign: { userId: user.id },
-            status: { in: ["SENT", "REPLIED"] },
-          },
-          select: { sentAt: true },
-          orderBy: { sentAt: "desc" },
-          take: 1,
-        },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 20,
-      skip: (page - 1) * 20,
-    }),
-    db.contact.count({ where }),
+  const [contactPage, existing, editing] = await Promise.all([
+    readContacts(user.id, q, page),
     db.contact.findMany({
       where: { userId: user.id },
       select: { email: true },
@@ -68,6 +40,7 @@ async function ContactsContent({
         })
       : null,
   ]);
+  const { contacts, total } = contactPage;
   return (
     <>
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -94,6 +67,10 @@ async function ContactsContent({
               Search
             </Button>
           </form>
+          <p className="mb-4 text-xs text-body">
+            People leave Contacts after a successful send. Add them back from
+            History when you want to follow up.
+          </p>
           <ExpandableContactsTable>
             {!contacts.length ? (
               <EmptyState
@@ -144,12 +121,19 @@ async function ContactsContent({
                           />
                         </td>
                         <td className="whitespace-nowrap text-xs text-body">
-                          <DateTime
-                            value={c.sends[0]?.sentAt?.toISOString() ?? null}
-                          />
+                          <DateTime value={c.lastSent?.toISOString() ?? null} />
                         </td>
                         <td className="sticky right-0 bg-card">
-                          <div className="flex">
+                          <div className="flex items-center gap-1">
+                            <AddToShortlist
+                              contactId={c.id}
+                              inShortlist={
+                                !c.shortlistRemovedAt &&
+                                (c.blocked || !c.previouslySent || c.followUp)
+                              }
+                              blocked={c.blocked}
+                              active={true}
+                            />
                             <Link
                               href={`/contacts?edit=${c.id}`}
                               className="inline-flex min-h-11 items-center px-3 text-link"

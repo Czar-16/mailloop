@@ -2,11 +2,12 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Send, Paperclip, ArrowRight, FileText } from "lucide-react";
+import { Send, Paperclip, ArrowRight, FileText, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { templateSchema, renderTemplate } from "@/lib/validation";
-import { submitCampaign } from "@/lib/actions";
+import { templateSchema } from "@/lib/validation";
+import { Highlighted, previewParts } from "@/components/template-preview";
+import { submitCampaign, removeFromShortlist } from "@/lib/actions";
 import { Feedback, useUnsavedChanges } from "@/components/forms";
 import { ProgressRing, estimateSeconds } from "@/components/progress-ring";
 import { DateTime } from "@/components/date-time";
@@ -55,6 +56,9 @@ export function Compose({
   const [previewId, setPreviewId] = useState("");
   const [result, setResult] = useState<ActionResult>();
   const [pending, start] = useTransition();
+  const [removingId, setRemovingId] = useState("");
+  const [removalResult, setRemovalResult] = useState<ActionResult>();
+  const [removing, startRemoval] = useTransition();
   const [idempotencyKey, setKey] = useState("");
   const router = useRouter();
   const roleInput = useRef<HTMLInputElement>(null);
@@ -72,6 +76,7 @@ export function Compose({
   const missingRoles = included.filter((contact) => !getRole(contact).trim());
   const readyToSend =
     !!template && included.length > 0 && missingRoles.length === 0;
+  const busy = pending || removing;
   const filteredContacts = contacts.filter(
     (c) => !roleFilter || getRole(c) === roleFilter,
   );
@@ -112,7 +117,7 @@ export function Compose({
             </label>
             <select
               id="compose-template"
-              disabled={pending}
+              disabled={busy}
               name="templateId"
               className="w-full text-sm"
               value={templateId}
@@ -147,7 +152,7 @@ export function Compose({
             <Input
               id="compose-role"
               ref={roleInput}
-              disabled={pending || !preview}
+              disabled={busy || !preview}
               aria-invalid={!!result?.fieldErrors?.role}
               aria-describedby={
                 result?.fieldErrors?.role ? "compose-role-error" : undefined
@@ -178,7 +183,7 @@ export function Compose({
             </p>
             <RoleChoices
               roles={roles}
-              disabled={pending || !preview}
+              disabled={busy || !preview}
               onChoose={(r) => {
                 if (preview) updateRole(preview.id, r);
               }}
@@ -217,7 +222,7 @@ export function Compose({
             <Button
               variant="outline"
               disabled={
-                pending ||
+                busy ||
                 !bulkEligible.length ||
                 (!allSelected && selected.length >= 15)
               }
@@ -246,6 +251,7 @@ export function Compose({
               Up to 15 eligible contacts in this filter
             </span>
           </div>
+          {removalResult?.ok === false && <Feedback result={removalResult} />}
           <div className="space-y-4">
             {!filteredContacts.length && (
               <p className="py-6 text-sm text-body">
@@ -267,30 +273,92 @@ export function Compose({
                     const checked = selected.some((s) => s.id === c.id);
                     return (
                       <div key={c.id} className="recipient-card">
-                        <label
-                          className={`recipient-header flex min-h-11 items-center gap-3 ${c.blocked ? "opacity-60" : "cursor-pointer"}`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => toggle(c)}
-                            disabled={
-                              pending ||
-                              c.blocked ||
-                              (!checked && selected.length >= 15)
-                            }
-                          />
-                          <span className="min-w-0 flex-1">
-                            <span className="block break-words text-[17px] font-semibold">
-                              {c.name}{" "}
-                              {c.company?.trim() && (
-                                <span className="recipient-company font-normal">
-                                  · {c.company}
-                                </span>
-                              )}
+                        <div className="flex items-start gap-2">
+                          <label
+                            className={`flex-1 recipient-header flex min-h-11 items-center gap-3 ${c.blocked ? "opacity-60" : "cursor-pointer"}`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggle(c)}
+                              disabled={
+                                busy ||
+                                c.blocked ||
+                                (!checked && selected.length >= 15)
+                              }
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="block break-words text-[17px] font-semibold">
+                                {c.name}{" "}
+                                {c.company?.trim() && (
+                                  <span className="recipient-company font-normal">
+                                    · {c.company}
+                                  </span>
+                                )}
+                              </span>
                             </span>
-                          </span>
-                        </label>
+                          </label>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`Remove ${c.name} from shortlist`}
+                            title={
+                              c.blocked
+                                ? "Wait for pending delivery to resolve"
+                                : "Remove from shortlist"
+                            }
+                            disabled={busy || c.blocked}
+                            onClick={() => {
+                              setRemovingId(c.id);
+                              setRemovalResult(undefined);
+                              startRemoval(async () => {
+                                try {
+                                  const response = await removeFromShortlist(
+                                    c.id,
+                                  );
+                                  setRemovalResult(response);
+                                  if (response.ok) {
+                                    setSelected((current) =>
+                                      current.filter(
+                                        (person) => person.id !== c.id,
+                                      ),
+                                    );
+                                    setResendIds((current) =>
+                                      current.filter((id) => id !== c.id),
+                                    );
+                                    setRecipientRoles((current) => {
+                                      const next = { ...current };
+                                      delete next[c.id];
+                                      return next;
+                                    });
+                                    setPreviewId((current) =>
+                                      current === c.id ? "" : current,
+                                    );
+                                    setResult(undefined);
+                                    setKey("");
+                                    router.refresh();
+                                  }
+                                } catch {
+                                  setRemovalResult({
+                                    ok: false,
+                                    message:
+                                      "Could not remove this person. Try again.",
+                                  });
+                                } finally {
+                                  setRemovingId("");
+                                }
+                              });
+                            }}
+                          >
+                            <X
+                              aria-hidden="true"
+                              className={
+                                removingId === c.id ? "opacity-50" : undefined
+                              }
+                            />
+                          </Button>
+                        </div>
                         <dl className="recipient-details">
                           <dt>Email</dt>
                           <dd>{c.email}</dd>
@@ -331,30 +399,6 @@ export function Compose({
             </p>
           )}
         </section>
-        {selected.length > 0 && (
-          <section className="panel space-y-4 p-6">
-            <h2 className="text-sm font-medium">
-              Recipient Roles for This Batch
-            </h2>
-            {selected.map((c) => (
-              <label key={c.id} className="block text-sm">
-                Job Role for {c.name}
-                <Input
-                  className="mt-2"
-                  name={`role-${c.id}`}
-                  value={getRole(c)}
-                  maxLength={160}
-                  autoComplete="off"
-                  disabled={pending}
-                  onChange={(e) => {
-                    updateRole(c.id, e.target.value);
-                  }}
-                  required
-                />
-              </label>
-            ))}
-          </section>
-        )}
         {selected.some((c) => c.previouslySent) && (
           <section className="panel p-5">
             <h2 className="text-sm font-medium">
@@ -373,7 +417,7 @@ export function Compose({
                   <input
                     type="checkbox"
                     checked={resendIds.includes(c.id)}
-                    disabled={pending}
+                    disabled={busy}
                     onChange={(e) => {
                       setResult(undefined);
                       setResendIds(
@@ -420,18 +464,26 @@ export function Compose({
             <div className="mail-preview space-y-4 p-4 text-sm leading-6">
               <p className="break-all text-body">To: {preview.email}</p>
               <h2 className="break-words border-b border-border pb-4 font-medium">
-                {renderTemplate(template.subject, {
-                  name: preview.name,
-                  company: preview.company,
-                  role: getRole(preview),
-                })}
+                <Highlighted
+                  parts={
+                    previewParts(template.subject, {
+                      name: preview.name,
+                      company: preview.company,
+                      role: getRole(preview),
+                    }).parts
+                  }
+                />
               </h2>
               <p className="min-h-40 whitespace-pre-wrap break-words">
-                {renderTemplate(template.body, {
-                  name: preview.name,
-                  company: preview.company,
-                  role: getRole(preview),
-                })}
+                <Highlighted
+                  parts={
+                    previewParts(template.body, {
+                      name: preview.name,
+                      company: preview.company,
+                      role: getRole(preview),
+                    }).parts
+                  }
+                />
               </p>
               {templateValidation?.success === false && (
                 <p role="alert" className="text-xs text-error-deep">
@@ -458,7 +510,7 @@ export function Compose({
                 type="checkbox"
                 name="attachResume"
                 checked={attachResume}
-                disabled={pending || !resume}
+                disabled={busy || !resume}
                 onChange={(e) => {
                   setAttachResume(e.target.checked);
                   setKey("");
@@ -560,7 +612,7 @@ export function Compose({
           <Feedback result={result} />
           <Button
             className="compose-send-button w-full"
-            disabled={pending || !connected || !readyToSend}
+            disabled={busy || !connected || !readyToSend}
             onClick={() => {
               if (!template || !included.length) {
                 setResult({

@@ -27,6 +27,8 @@ vi.mock("@/lib/gmail", () => ({ gmailForUser: vi.fn() }));
 
 import {
   addToShortlist,
+  addContactToShortlist,
+  removeFromShortlist,
   archiveContact,
   archiveTemplate,
   importContacts,
@@ -37,7 +39,7 @@ import {
   savePreferences,
 } from "@/lib/actions";
 
-import { readShortlist } from "@/lib/shortlist";
+import { readShortlist, readContacts } from "@/lib/shortlist";
 import { getCampaignProgress } from "@/lib/campaign-progress-actions";
 
 const enabled = process.env.MAILLOOP_DB_TESTS === "1";
@@ -171,6 +173,109 @@ describe.runIf(enabled)("authenticated database-backed actions", () => {
     await expect(getCampaignProgress(["invalid-id"])).rejects.toThrow();
   });
 
+  it("persists shortlist removal, preserves contacts, and supports explicit re-addition", async () => {
+    expect((await readShortlist(userId)).total).toBe(1);
+    expect(await removeFromShortlist(contactId)).toMatchObject({ ok: true });
+    expect((await readShortlist(userId)).total).toBe(0);
+    const removed = await db.contact.findFirstOrThrow({
+      where: { id: contactId, userId },
+    });
+    expect(removed.archivedAt).toBeNull();
+    expect(removed.shortlistRemovedAt).toBeInstanceOf(Date);
+    expect(await removeFromShortlist(contactId)).toMatchObject({ ok: true });
+    expect(
+      (await db.contact.findFirstOrThrow({ where: { id: contactId, userId } }))
+        .shortlistRemovedAt,
+    ).toEqual(removed.shortlistRemovedAt);
+    expect(
+      await saveContact(
+        form({
+          id: contactId,
+          name: "Alex edited",
+          email: "alex@example.test",
+        }),
+      ),
+    ).toMatchObject({ ok: true });
+    expect((await readShortlist(userId)).total).toBe(0);
+    expect(await addContactToShortlist(contactId)).toMatchObject({ ok: true });
+    expect((await readShortlist(userId)).total).toBe(1);
+    expect(await removeFromShortlist("invalid")).toMatchObject({ ok: false });
+    mocks.requireUser.mockResolvedValue({ id: otherId });
+    expect(await removeFromShortlist(contactId)).toMatchObject({ ok: false });
+    expect(await addContactToShortlist(contactId)).toMatchObject({ ok: false });
+    expect((await readShortlist(userId)).total).toBe(1);
+  });
+
+  it("hides successfully emailed contacts until History opens another follow-up", async () => {
+    expect((await readContacts(userId)).total).toBe(1);
+    const campaign = await db.campaign.create({
+      data: { userId, templateId, status: "COMPLETED" },
+    });
+    const send = await db.send.create({
+      data: {
+        campaignId: campaign.id,
+        contactId,
+        recipientEmail: "alex@example.test",
+        status: "SENT",
+        deliveryState: "DONE",
+        sentAt: new Date(),
+      },
+    });
+    expect((await readContacts(userId)).total).toBe(0);
+    expect((await readContacts(otherId)).total).toBe(0);
+    expect(await db.contact.count({ where: { id: contactId, userId } })).toBe(
+      1,
+    );
+    expect(await addToShortlist(send.id)).toMatchObject({ ok: true });
+    expect((await readContacts(userId)).total).toBe(1);
+    await db.send.create({
+      data: {
+        campaignId: campaign.id,
+        contactId,
+        status: "REPLIED",
+        deliveryState: "DONE",
+        createdAt: new Date(Date.now() + 1000),
+        sentAt: new Date(),
+      },
+    });
+    expect((await readContacts(userId)).total).toBe(0);
+  });
+
+  it("removes follow-ups without deleting history and blocks pending delivery changes", async () => {
+    const campaign = await db.campaign.create({
+      data: { userId, templateId, status: "COMPLETED" },
+    });
+    const send = await db.send.create({
+      data: {
+        campaignId: campaign.id,
+        contactId,
+        status: "SENT",
+        deliveryState: "DONE",
+        sentAt: new Date(),
+      },
+    });
+    expect(await addToShortlist(send.id)).toMatchObject({ ok: true });
+    expect(await removeFromShortlist(contactId)).toMatchObject({ ok: true });
+    expect((await readShortlist(userId)).total).toBe(0);
+    expect(
+      (await db.contact.findFirstOrThrow({ where: { id: contactId, userId } }))
+        .followUpRequestedAt,
+    ).toBeNull();
+    expect(
+      await db.send.count({ where: { id: send.id, campaign: { userId } } }),
+    ).toBe(1);
+    expect(await addToShortlist(send.id)).toMatchObject({ ok: true });
+    expect((await readShortlist(userId)).contacts[0].followUp).toBe(true);
+    expect(await removeFromShortlist(contactId)).toMatchObject({ ok: true });
+    expect(await addContactToShortlist(contactId)).toMatchObject({ ok: true });
+    await db.send.create({
+      data: { campaignId: campaign.id, contactId, status: "QUEUED" },
+    });
+    expect(await removeFromShortlist(contactId)).toMatchObject({ ok: false });
+    expect(await addContactToShortlist(contactId)).toMatchObject({ ok: false });
+    expect((await readShortlist(userId)).contacts[0].blocked).toBe(true);
+  });
+
   it("persists idempotent follow-ups, consumes only successful later attempts, and blocks unresolved delivery", async () => {
     const campaign = await db.campaign.create({
       data: { userId, templateId, status: "COMPLETED" },
@@ -262,15 +367,13 @@ describe.runIf(enabled)("authenticated database-backed actions", () => {
       orderBy: { name: "asc" },
     });
     await db.send.createMany({
-      data: contacts
-        .slice(0, 5)
-        .map((c) => ({
-          campaignId: campaign.id,
-          contactId,
-          recipientEmail: c.email,
-          status: "SENT" as const,
-          deliveryState: "DONE" as const,
-        })),
+      data: contacts.slice(0, 5).map((c) => ({
+        campaignId: campaign.id,
+        contactId,
+        recipientEmail: c.email,
+        status: "SENT" as const,
+        deliveryState: "DONE" as const,
+      })),
     });
     const page = await readShortlist(userId);
     expect(page.total).toBe(20);
