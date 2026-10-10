@@ -5,7 +5,6 @@ import {
 import { TableValue } from "@/components/table-value";
 import { Suspense } from "react";
 import { WorkspaceSkeleton } from "@/components/workspace-skeleton";
-import { DateTime } from "@/components/date-time";
 import Link from "next/link";
 import { requireUser } from "@/lib/session";
 import { readContacts } from "@/lib/shortlist";
@@ -82,71 +81,70 @@ async function ContactsContent({
                 }
               />
             ) : (
-              <div className="panel overflow-x-auto">
-                <table className="w-full text-sm">
-                  <caption className="sr-only">Your contacts</caption>
-                  <thead>
-                    <tr>
-                      <th>Person</th>
-                      <th>Company</th>
-                      <th>Job Role</th>
-                      <th>Last Sent</th>
-                      <th className="sticky right-0 z-10 bg-card">
-                        <div className="flex items-center gap-1">
-                          <span>Actions</span>
-                          <ContactsTableExpandButton />
-                        </div>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {contacts.map((c) => (
-                      <tr key={c.id}>
-                        <td>
-                          <p className="max-w-64 break-words font-medium">
-                            {c.name}
-                          </p>
-                          <p className="mt-1 max-w-64 break-all text-xs text-body">
-                            {c.email}
-                          </p>
-                        </td>
-                        <td className="text-body">
-                          <TableValue value={c.company} singleLine />
-                        </td>
-                        <td className="whitespace-nowrap text-body">
-                          <TableValue
-                            value={c.jobRole}
-                            missing="Choose a job role"
-                            singleLine
-                          />
-                        </td>
-                        <td className="whitespace-nowrap text-xs text-body">
-                          <DateTime value={c.lastSent?.toISOString() ?? null} />
-                        </td>
-                        <td className="sticky right-0 bg-card">
-                          <div className="flex items-center gap-1">
-                            <AddToShortlist
-                              contactId={c.id}
-                              inShortlist={
-                                !c.shortlistRemovedAt &&
-                                (c.blocked || !c.previouslySent || c.followUp)
-                              }
-                              blocked={c.blocked}
-                              active={true}
-                            />
-                            <Link
-                              href={`/contacts?edit=${c.id}`}
-                              className="inline-flex min-h-11 items-center px-3 text-link"
-                            >
-                              Edit
-                            </Link>
-                            <DeleteButton id={c.id} kind="contact" />
-                          </div>
-                        </td>
+              <div className="panel overflow-hidden">
+                <div className="contacts-table-toolbar">
+                  <span className="text-sm font-medium">Your contacts</span>
+                  <ContactsTableExpandButton />
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="contacts-table w-full text-sm">
+                    <caption className="sr-only">Your contacts</caption>
+                    <thead>
+                      <tr>
+                        <th>Person</th>
+                        <th>Company</th>
+                        <th>Job Role</th>
+                        <th className="contacts-table-actions-heading">
+                          Actions
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {contacts.map((c) => (
+                        <tr key={c.id}>
+                          <td>
+                            <p className="max-w-64 break-words font-medium">
+                              {c.name}
+                            </p>
+                            <p className="mt-1 max-w-64 break-all text-xs text-body">
+                              {c.email}
+                            </p>
+                          </td>
+                          <td className="text-body">
+                            <TableValue value={c.company} singleLine />
+                          </td>
+                          <td className="whitespace-nowrap text-body">
+                            <TableValue
+                              value={c.jobRole}
+                              missing="Choose a job role"
+                              singleLine
+                            />
+                          </td>
+                          <td>
+                            <div className="flex items-center gap-1">
+                              <AddToShortlist
+                                contactId={c.id}
+                                inShortlist={
+                                  !c.shortlistRemovedAt &&
+                                  (c.blocked || !c.previouslySent || c.followUp)
+                                }
+                                blocked={c.blocked}
+                                active={true}
+                              />
+                              <Link
+                                href={`/contacts?edit=${c.id}`}
+                                className="inline-flex min-h-11 items-center px-3 text-link"
+                              >
+                                Edit
+                              </Link>
+                              <DeleteButton id={c.id} kind="contact" />
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
             <Pagination

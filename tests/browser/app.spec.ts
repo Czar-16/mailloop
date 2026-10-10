@@ -4104,12 +4104,12 @@ test("contacts table expands, restores focus, and returns to editing", async ({
   });
   await expect(
     page
-      .getByRole("columnheader", { name: /Actions/ })
+      .locator(".contacts-table-toolbar")
       .getByRole("button", { name: "Expand contacts table", exact: true }),
   ).toHaveCount(1);
   const panelBounds = (await page
     .getByRole("table", { name: "Your contacts" })
-    .locator("..")
+    .locator("../..")
     .boundingBox())!;
   const iconBounds = (await expand.boundingBox())!;
   expect(iconBounds.x).toBeGreaterThanOrEqual(panelBounds.x);
