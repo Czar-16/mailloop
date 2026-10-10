@@ -1,0 +1,26 @@
+{
+  "voice": "af_heart",
+  "engine": "Kokoro via Hyperframes",
+  "clips": [
+    {
+      "id": "voice-scene-1",
+      "start": 0.2,
+      "duration": 1.8133333333333332
+    },
+    {
+      "id": "voice-scene-2",
+      "start": 3.55,
+      "duration": 3.456
+    },
+    {
+      "id": "voice-scene-3",
+      "start": 10.5,
+      "duration": 4.1386666666666665
+    },
+    {
+      "id": "voice-scene-4",
+      "start": 16.5,
+      "duration": 2.7093333333333334
+    }
+  ]
+}
